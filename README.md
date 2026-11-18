@@ -7,7 +7,8 @@ An AI agent earns autonomy through real work. Lessel watches what happens after 
 causes a confirmed failure, its permissions change automatically. When the failure came from poisoned context,
 Lessel excuses the agent and goes after the source instead.
 
-The full design is in [`docs/Lessel_Build_Spec_v1.2.md`](docs/Lessel_Build_Spec_v1.2.md) (PDF alongside). Section
+The full design is in [`docs/Lessel_Build_Spec_v1.2.md`](docs/Lessel_Build_Spec_v1.2.md) (PDF alongside), with
+the as-built changes in [`docs/Lessel_Build_Spec_v1.3.md`](docs/Lessel_Build_Spec_v1.3.md). Section
 numbers below (§) refer to it. Submission material: [judge guide](docs/JUDGES.md),
 [Devpost write-up](docs/DEVPOST.md), [video plan](docs/VIDEO.md), [Marketplace draft](docs/MARKETPLACE.md),
 [data handling](docs/PRIVACY.md).
