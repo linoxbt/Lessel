@@ -33,4 +33,28 @@ async function validateReadyToMerge(args) {
   }
 }
 
-module.exports = { validateReadyToMerge };
+/**
+ * Start validator (P4): blocks an agent from starting work it isn't eligible for, e.g. it's suspended,
+ * at L0 for the item's shape, or the item's context is tainted. People are never blocked by this.
+ */
+async function validateAgentStart(args) {
+  const key = args?.issue?.key;
+  if (!key) return { result: true };
+  const cfg = await repo.getSettings();
+  try {
+    const item = await repo.getItem(key);
+    const agentId = item?.assigned_agent_id;
+    if (!agentId) return { result: true };
+    const agent = await repo.getAgent(agentId);
+    if (!agent) return { result: true };
+    const shape = shapeObj(item.shape_id, item.classified_by, cfg);
+    const d = await decide({ agent, shape, issueKey: key }, cfg);
+    if (!d.blocked || cfg.enforcementMode !== "enforcing") return { result: true };
+    return { result: false, errorMessage: `Lessel: ${sentence(agent, shape, d)} Assign it to someone else or resolve the block first.` };
+  } catch (e) {
+    console.error("validateAgentStart error", e);
+    return { result: true }; // starting work is never blocked by Lessel's own failure
+  }
+}
+
+module.exports = { validateReadyToMerge, validateAgentStart };

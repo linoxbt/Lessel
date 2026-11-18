@@ -84,6 +84,12 @@ function makeWorld() {
       return best;
     },
     async getSpace() { return { key: "ENG" }; },
+    async updatePage(id, { title, storage, nextVersion }) {
+      const vs = pages.get(String(id));
+      if (nextVersion !== vs.length + 1) throw new Error(`version conflict: ${nextVersion} vs ${vs.length + 1}`);
+      vs.push({ number: nextVersion, body: storage, title, spaceId: "s1", createdAt: new Date(clock.t).toISOString() });
+      return { id, version: { number: nextVersion } };
+    },
   };
   const llm = { async classifyClass() { return { change_class: "business-logic", confidence: 0.5 }; } };
 

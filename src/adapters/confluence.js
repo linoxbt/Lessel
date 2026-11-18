@@ -41,6 +41,18 @@ async function versionAt(pageId, at) {
   return best;
 }
 
+/** Publish a new version of a page with the given storage body (used by Clean Room restore). */
+async function updatePage(pageId, { title, storage, nextVersion, message }) {
+  const { route } = api();
+  const res = await api().asApp().requestConfluence(route`/wiki/api/v2/pages/${pageId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ id: String(pageId), status: "current", title,
+      body: { representation: "storage", value: storage }, version: { number: nextVersion, message } }),
+  });
+  return readJson(res, "update page");
+}
+
 async function getSpace(spaceId) {
   const { route } = api();
   return get(route`/wiki/api/v2/spaces/${spaceId}`);
@@ -52,4 +64,4 @@ function pageIdFromUrl(url) {
   return s.match(/\/pages\/(\d+)/)?.[1] ?? s.match(/[?&]pageId=(\d+)/)?.[1] ?? null;
 }
 
-module.exports = { getPage, listVersions, versionAt, getSpace, pageIdFromUrl };
+module.exports = { getPage, updatePage, listVersions, versionAt, getSpace, pageIdFromUrl };

@@ -40,7 +40,7 @@ modules:
 
 remotes:
   - key: runner
-    baseUrl: https://YOUR-RUNNER-HOST.example.com # where demo/runner is reachable over HTTPS
+    baseUrl: https://agent-runner-production-b1b73150.up.railway.app # demo/runner on Railway (project lessel-demo)
     operations:
       - compute
       - fetch

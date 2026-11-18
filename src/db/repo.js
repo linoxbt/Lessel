@@ -214,6 +214,7 @@ async function insertDecisionEvent({ event_id, agent_id, shape_id, before, after
 }
 const decisionEventsFor = (agentId, shapeId) => query(`SELECT * FROM decision_events WHERE agent_id = ? AND shape_id = ?
   ORDER BY at DESC LIMIT 20`, [agentId, shapeId]);
+const recentDecisionEvents = (limit = 100) => query(`SELECT * FROM decision_events ORDER BY at DESC LIMIT ${Number(limit) | 0}`, []);
 async function logStaffAction({ actor, action, target, note = null, rev = Date.now() }) {
   await exec(`INSERT IGNORE INTO staff_actions (action_id, actor, action, target, note) VALUES (?, ?, ?, ?, ?)`,
     [`${action}:${target}:${rev}`.slice(0, 255), actor, action, target, note]);
@@ -269,6 +270,6 @@ module.exports = {
   getSignal, insertSignal, setCausality, setSeverity, signalsForItem, signalsForAgentShape, signalsByVia, openSuspected,
   maxSignalUpdate, upsertRecord, getRecord, allRecords,
   activeHolds, allActiveHolds, syncHolds,
-  insertDecisionEvent, decisionEventsFor, logStaffAction, staffActionsFor,
+  insertDecisionEvent, decisionEventsFor, recentDecisionEvents, logStaffAction, staffActionsFor,
   upsertSource, getSource, listSources, patchSource, addFinding, findingsFor, insertRead, readsForItem, readsForSource,
 };

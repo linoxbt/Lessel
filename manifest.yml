@@ -68,6 +68,10 @@ modules:
       name: Lessel ready-to-merge check
       description: Blocks Ready to merge until the PR meets Lessel's decision.
       function: validateReadyToMerge
+    - key: lessel-agent-start
+      name: Lessel agent start check
+      description: Blocks an agent from starting work it is not eligible for.
+      function: validateAgentStart
 
   jira:projectPage:
     - key: lessel-board
@@ -235,6 +239,8 @@ modules:
       handler: index.mergeGate
     - key: validateReadyToMerge
       handler: index.validateReadyToMerge
+    - key: validateAgentStart
+      handler: index.validateAgentStart
     - key: uiResolver
       handler: index.uiResolver
     - key: rankAssignees
@@ -270,6 +276,7 @@ permissions:
     - read:confluence-content.summary
     - read:confluence-content.all
     - read:page:confluence
+    - write:page:confluence
     - read:graph:issue:jira
     - read:graph:commit:external
     - read:graph:pull-request:external

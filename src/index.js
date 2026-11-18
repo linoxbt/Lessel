@@ -5,7 +5,7 @@ const { onJiraEvent } = require("./events/jira");
 const { onBitbucketEvent } = require("./events/bitbucket");
 const { onConfluenceEvent } = require("./events/confluence");
 const { mergeGate } = require("./enforce/gate");
-const { validateReadyToMerge } = require("./enforce/validators");
+const { validateReadyToMerge, validateAgentStart } = require("./enforce/validators");
 const actions = require("./mcp/actions");
 const jobs = require("./jobs");
 const { uiResolver } = require("./ui/resolver");
@@ -30,6 +30,7 @@ module.exports = {
   jobs: jobs.jobsResolver(),
   mergeGate,
   validateReadyToMerge,
+  validateAgentStart,
   uiResolver,
   rankAssignees: actions.rankAssignees,
   explainRecord: actions.explainRecord,

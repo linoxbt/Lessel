@@ -113,6 +113,31 @@ async function markFixed(sourceId, actor, cleanFromVersion, cfg) {
   return blastRadius(sourceId);
 }
 
+/**
+ * P4 restore: publish the last clean version (the one before tainted_from_version) as a new version,
+ * then mark the source clean from that new version. Confluence pages only.
+ */
+async function restoreClean(sourceId, actor, cfg) {
+  cfg = cfg ?? await repo.getSettings();
+  const src = await repo.getSource(sourceId);
+  if (!src || src.tainted_from_version == null) throw new UserError("Confirm the taint before restoring.");
+  const pageId = String(sourceId).match(/^confluence:page:(\d+)$/)?.[1];
+  if (!pageId) throw new UserError("Only Confluence pages can be restored.");
+  const cleanVersion = src.tainted_from_version - 1;
+  if (cleanVersion < 1) throw new UserError("There is no clean version before the taint.");
+  const [clean, current] = await Promise.all([ports.confluence.getPage(pageId, cleanVersion), ports.confluence.getPage(pageId, null)]);
+  const nextVersion = (current?.version?.number ?? 0) + 1;
+  await ports.confluence.updatePage(pageId, { title: current?.title ?? clean.title, storage: clean.body?.storage?.value ?? "",
+    nextVersion, message: `Lessel Clean Room: restored v${cleanVersion} (tainted from v${src.tainted_from_version})` });
+  await repo.patchSource(sourceId, { state: "restored", clean_from_version: nextVersion });
+  await repo.logStaffAction({ actor, action: "restore", target: sourceId, note: `v${cleanVersion} republished as v${nextVersion}` });
+  await reexcuseForSource(sourceId, cfg);
+  const br = await blastRadius(sourceId);
+  await notifyItems(br.items.map(i => i.issue_key), { id: `restore:${sourceId}:${nextVersion}`, rev: 0,
+    text: `${src.title || src.url} was restored to its last clean content as v${nextVersion}` }, cfg);
+  return br;
+}
+
 async function dismissTaint(sourceId, actor) {
   await repo.patchSource(sourceId, { state: "clean", rationale: null });
   await repo.logStaffAction({ actor, action: "taint-dismiss", target: sourceId });
@@ -166,4 +191,4 @@ async function checkContext(level, sourceUrl) {
 }
 
 module.exports = { sourceRef, scanConfluencePage, scanHistory, scanJiraText, blastRadius, confirmTaint, markFixed,
-  dismissTaint, declareContext, checkContext };
+  restoreClean, dismissTaint, declareContext, checkContext };

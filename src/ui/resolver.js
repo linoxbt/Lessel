@@ -15,6 +15,8 @@ const graph = require("../services/graph");
 
 class Forbidden extends Error {}
 
+const safeJson = s => { try { return JSON.parse(s); } catch { return {}; } };
+
 async function requireAdmin() {
   if (!(await ports.jira.userHas("ADMINISTER"))) throw new Forbidden("Only Jira admins can do this.");
 }
@@ -173,6 +175,10 @@ const DEFINITIONS = {
   getSources: async () => sources(),
   confirmTaint: async ({ payload, context }) => { await requireAdmin(); await cleanroom.confirmTaint(payload.sourceId, context.accountId, payload.fromVersion); return sources(); },
   markFixed: async ({ payload, context }) => { await requireAdmin(); await cleanroom.markFixed(payload.sourceId, context.accountId, payload.cleanFromVersion); return sources(); },
+  restoreClean: async ({ payload, context }) => { await requireAdmin(); await cleanroom.restoreClean(payload.sourceId, context.accountId); return sources(); },
+  getHistory: async () => (await repo.recentDecisionEvents(100)).map(e => ({
+    at: e.at, agentId: e.agent_id, shapeId: e.shape_id, cause: e.cause,
+    before: safeJson(e.before_json), after: safeJson(e.after_json) })),
   dismissTaint: async ({ payload, context }) => { await requireAdmin(); await cleanroom.dismissTaint(payload.sourceId, context.accountId); return sources(); },
   scanHistory: async ({ payload }) => { await requireAdmin(); return require("../jobs").enqueue({ type: "scan-history", pageId: payload.pageId }); },
   runJob: async ({ payload }) => {

@@ -114,6 +114,9 @@ function CleanRoom() {
               <Textfield placeholder="first clean version" value={input[`${s.source_id}:fix`] ?? ""} onChange={e => setInput({ ...input, [`${s.source_id}:fix`]: e.target.value })} />
               <Button onClick={() => run("markFixed", { sourceId: s.source_id, cleanFromVersion: input[`${s.source_id}:fix`] })}>Mark fixed</Button>
               <Button appearance="subtle" onClick={() => run("dismissTaint", { sourceId: s.source_id })}>Not tainted</Button>
+              {s.tainted_from_version > 1 && s.state !== "restored" && s.source_id.startsWith("confluence:page:")
+                ? <Button appearance="warning" onClick={() => run("restoreClean", { sourceId: s.source_id })}>Restore v{s.tainted_from_version - 1}</Button>
+                : null}
             </Inline>
             <Heading as="h5">Blast radius</Heading>
             {s.blastRadius.length ? s.blastRadius.map(b => (
@@ -126,6 +129,28 @@ function CleanRoom() {
   );
 }
 
+function History() {
+  const [rows, setRows] = useState(null);
+  useEffect(() => { invoke("getHistory").then(setRows); }, []);
+  if (!rows) return <Spinner />;
+  if (rows.error) return <ErrorMessage error={rows.error} />;
+  if (!rows.length) return <Text>No level or eligibility changes yet.</Text>;
+  return (
+    <DynamicTable
+      head={{ cells: ["When", "Agent", "Shape", "Change", "Because"].map(c => ({ key: c, content: c })) }}
+      rows={rows.map((r, i) => ({ key: String(i), cells: [
+        { key: "When", content: when(r.at) },
+        { key: "Agent", content: r.agentId },
+        { key: "Shape", content: r.shapeId },
+        { key: "Change", content: r.after?.effective != null
+          ? `L${r.before?.effective ?? "?"} → L${r.after.effective}${r.after.blocked ? " (blocked)" : ""}` : "context" },
+        { key: "Because", content: r.cause },
+      ] }))}
+      rowsPerPage={20}
+    />
+  );
+}
+
 function App() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
@@ -135,9 +160,10 @@ function App() {
     <Stack space="space.200">
       <ModeBanner mode={data.mode} windowNote={data.windowNote} />
       <Tabs id="lessel-tabs">
-        <TabList><Tab>Agents × shapes</Tab><Tab>Clean Room</Tab></TabList>
+        <TabList><Tab>Agents × shapes</Tab><Tab>Clean Room</Tab><Tab>History</Tab></TabList>
         <TabPanel><Box xcss={xcss({ paddingTop: "space.200" })}>{data.agents.length ? <Grid data={data} /> : <Text>No agents yet. Add them in Lessel settings.</Text>}</Box></TabPanel>
         <TabPanel><Box xcss={xcss({ paddingTop: "space.200" })}><CleanRoom /></Box></TabPanel>
+        <TabPanel><Box xcss={xcss({ paddingTop: "space.200" })}><History /></Box></TabPanel>
       </Tabs>
     </Stack>
   );
