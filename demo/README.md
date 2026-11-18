@@ -27,6 +27,34 @@ and runs at effort `high`. **Atlas** makes the smallest change, tests are option
 Both use Claude Opus 5.5. A refusal falls back to another model server-side (`fallbacks: "default"`) rather
 than failing the ticket.
 
+## Already hosted (Railway project `lessel-demo`)
+
+| Service | URL | State |
+|---|---|---|
+| ledger staging + Postgres | https://ledger-staging-production-1c72d760.up.railway.app | Live. Migrations run on start; `/health` reports the deployed commit; the synthetic check passes against it |
+| A2A runner | https://agent-runner-production-b1b73150.up.railway.app | Live with git and a `/data` volume. Refuses every A2A request until you configure it (below). `agents-app/manifest.yml` already points here |
+
+Both services deploy from `main` of the GitHub repo, and each one redeploys only when its own folder changes.
+To finish the runner, set these in Railway (service `agent-runner` → Variables):
+- `FORGE_APP_ID`
+- `ANTHROPIC_API_KEY`
+- `BROOK_BITBUCKET_TOKEN`
+- `ATLAS_BITBUCKET_TOKEN`
+- `BROOK_ATLASSIAN_TOKEN`
+- `ATLAS_ATLASSIAN_TOKEN`
+- the placeholders in `RUNNER_CONFIG_JSON`: site URL, Lessel MCP URL, Bitbucket workspace, agent emails.
+
+The MCP login (`npm run mcp-login -- brook`) needs a browser, so run it locally. Then copy
+`data/secrets/mcp-*.json` to the runner's `/data/secrets/`, or run the runner locally.
+
+For the Bitbucket pipeline to deploy agent commits to this staging service:
+1. Create a Railway **project token** for `lessel-demo`.
+2. Set repository variables in Bitbucket:
+   - `RAILWAY_TOKEN` (secured)
+   - `RAILWAY_SERVICE=ledger-staging`
+   - `STAGING_URL=https://ledger-staging-production-1c72d760.up.railway.app`
+   - the Jira variables for incidents.
+
 ## Accounts you need
 
 | Account | Used for |

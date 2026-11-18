@@ -8,7 +8,8 @@ causes a confirmed failure, its permissions change automatically. When the failu
 Lessel excuses the agent and goes after the source instead.
 
 The full design is in [`docs/Lessel_Build_Spec_v1.2.md`](docs/Lessel_Build_Spec_v1.2.md) (PDF alongside). Section
-numbers below (§) refer to it.
+numbers below (§) refer to it. Submission material: [judge guide](docs/JUDGES.md),
+[Devpost write-up](docs/DEVPOST.md), [video plan](docs/VIDEO.md).
 
 ## Status
 
@@ -30,7 +31,9 @@ deployed yet: deploying needs your Atlassian login.
 | UI Kit board (grid, evidence drawer, Clean Room tab), issue panel, settings page | Built, bundles; not yet seen on a live site |
 | Backfill and hourly jobs on the `lessel-jobs` queue | Built; backfill not yet run against real data |
 | Teamwork Graph (§10.5): saved Cypher queries; incidents linked in the graph become associated signals when the panel opens; commit → PR → deployment counts in the panel | Built, tested with a fake graph; queries register with `scripts/register-graph-queries.js` |
-| Start validator, quarantine/restore, LLM scan stage (P4) | Not built (cut order) |
+| P4: agent start validator, Clean Room restore (republish last clean version), History tab | Built, tested |
+| Judge snapshot export/import (no person ids; "Imported history" banner) | Built, round-trip tested |
+| P4: page quarantine (restrictions API), LLM scan stage | Not built (cut order) |
 
 ## Layout
 
