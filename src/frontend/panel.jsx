@@ -87,6 +87,7 @@ function App() {
         </SectionMessage>
       ) : <Text>Team item: people are never scored individually.</Text>}
 
+      {data.recommendation ? <SectionMessage appearance="discovery"><Text>{data.recommendation}</Text></SectionMessage> : null}
       <Inline space="space.100" alignBlock="center">
         <Text>Shape: <Strong>{data.shapeId}</Strong> ({data.shapeState}, by {data.classifiedBy}). Outcome: <Strong>{data.outcome}</Strong>.</Text>
         {data.classifiedBy === "llm" ? <Button spacing="compact" onClick={() => setShape(data.shapeId)}>Confirm shape</Button> : null}

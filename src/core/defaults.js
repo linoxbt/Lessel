@@ -15,6 +15,7 @@ const DEFAULTS = Object.freeze({
   windowHours: 336,                            // 14 days; demo site uses 72, labelled
   windowEnvironment: "Production",             // Bitbucket deployment environment type
   suspectedExpiryHours: 168,
+  suspectedReminderHours: 24,                  // comment on the work item this long before a suspected signal expires
   lateConfirmDays: 90,
   suspectWindowHours: 24,                      // incident within 24 h of deploy on same service → suspected
   linkConfirms: true,
@@ -62,6 +63,8 @@ const DEFAULTS = Object.freeze({
     llmScan: "suspect",                       // Clean Room LLM stage: "suspect" pages only | "all" pages | "off"
   },                     // set when history was imported for judges (shown on every board)  // queryKeys from scripts/register-graph-queries.js
   cleanRoom: {
+    quarantineLabel: "lessel-quarantine",
+    quarantineGroup: null,                     // e.g. "lessel-quarantine": restrict reading to this group while quarantined
     confluenceSpaces: ["ENG"],
     jiraProjects: ["PAY"],
     allowedDomains: ["atlassian.net", "atlassian.com", "bitbucket.org"],

@@ -88,9 +88,12 @@ async function panel({ issueKey }, context = {}) {
   const agent = agentId ? await repo.getAgent(agentId) : null;
   const shape = shapeObj(item.shape_id, item.classified_by, cfg);
   let decision = null;
+  let recommendation = null;
   if (agent) {
     const d = await decide({ agent, shape, issueKey }, cfg);
     decision = { sentence: sentence(agent, shape, d), blocked: d.blocked, approvals: d.approvals, selfMerge: d.selfMerge };
+    // P4 hint: when this agent is blocked or supervised here, name a better-qualified agent for the same shape.
+    if (!item.merged_at && (d.blocked || d.effective <= 1)) recommendation = await betterAgent(agent, shape, d, cfg);
   }
   const now = ports.now();
   const sigs = await repo.signalsForItem(issueKey);
@@ -100,6 +103,7 @@ async function panel({ issueKey }, context = {}) {
     actorKind: item.actor_kind, outcome: item.outcome, shapeId: item.shape_id, classifiedBy: item.classified_by,
     shapeState: item.shape_state, windowEnds: item.window_ends, decision,
     canConfirm: canConfirm(item, now, cfg),
+    recommendation,
     signals: sigs.map(s => ({ id: s.signal_id, kind: s.kind, ref: s.ref, severity: s.severity, causality: s.causality,
       rev: s.rev, decidedBy: s.decided_by, via: s.confirmed_via, decidedAt: s.decided_at })),
     context: contextStatus(reads),
@@ -110,6 +114,22 @@ async function panel({ issueKey }, context = {}) {
     graph: graphSync,
     devChain: await graph.devChain({ issueKey, cloudId: context.cloudId }, cfg),
   };
+}
+
+/** Another agent with a higher effective level on this shape (record + holds only; never names people). */
+async function betterAgent(current, shape, d, cfg) {
+  let best = null;
+  for (const other of await repo.listAgents()) {
+    if (other.agent_id === current.agent_id || other.suspended) continue;
+    const rec = await repo.getRecord(other.agent_id, shape.shape_id);
+    if (!rec) continue;
+    const od = decideCore({ agent: other, shape, rec, holds: await repo.activeHolds(other.agent_id, shape.shape_id) }, cfg);
+    if (od.blocked || od.effective <= (d.blocked ? 0 : d.effective)) continue;
+    if (!best || od.effective > best.d.effective || (od.effective === best.d.effective && od.rec.lower90 > best.d.rec.lower90)) best = { other, d: od };
+  }
+  if (!best) return null;
+  return `${best.other.display_name} is L${best.d.effective} on ${shape.shape_id} ` +
+    `(${best.d.rec.clean} of ${best.d.rec.total} clean). Consider reassigning.`;
 }
 
 async function settingsView() {
@@ -179,6 +199,7 @@ const DEFINITIONS = {
   getSources: async () => sources(),
   confirmTaint: async ({ payload, context }) => { await requireAdmin(); await cleanroom.confirmTaint(payload.sourceId, context.accountId, payload.fromVersion); return sources(); },
   markFixed: async ({ payload, context }) => { await requireAdmin(); await cleanroom.markFixed(payload.sourceId, context.accountId, payload.cleanFromVersion); return sources(); },
+  quarantine: async ({ payload, context }) => { await requireAdmin(); await cleanroom.quarantine(payload.sourceId, context.accountId); return sources(); },
   restoreClean: async ({ payload, context }) => { await requireAdmin(); await cleanroom.restoreClean(payload.sourceId, context.accountId); return sources(); },
   getHistory: async () => (await repo.recentDecisionEvents(100)).map(e => ({
     at: e.at, agentId: e.agent_id, shapeId: e.shape_id, cause: e.cause,

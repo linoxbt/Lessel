@@ -284,6 +284,8 @@ permissions:
     - read:confluence-content.all
     - read:page:confluence
     - write:page:confluence
+    - write:confluence-content     # quarantine: labels and read restrictions
+    - write:comment:confluence     # quarantine: footer comment
     - read:graph:issue:jira
     - read:graph:commit:external
     - read:graph:pull-request:external

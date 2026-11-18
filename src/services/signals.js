@@ -117,6 +117,31 @@ async function expireSuspected(cfg) {
   return n;
 }
 
+/** Hourly: comment on the work item once, shortly before an undecided suspected signal expires. */
+async function remindSuspected(cfg) {
+  cfg = cfg ?? await repo.getSettings();
+  const now = ports.now().getTime();
+  let n = 0;
+  for (const sig of await repo.openSuspected()) {
+    const item = await repo.getItem(sig.issue_key);
+    if (!item?.window_ends) continue;
+    const expiresAt = item.window_ends.getTime() + cfg.suspectedExpiryHours * 3600e3;
+    if (now < expiresAt - cfg.suspectedReminderHours * 3600e3 || now >= expiresAt) continue;
+    const fresh = await repo.insertDecisionEvent({ event_id: `remind:${sig.signal_id}:r${sig.rev}`.slice(0, 255),
+      agent_id: item.agent_id ?? "team", shape_id: item.shape_id, before: {}, after: {}, cause: `reminder for ${sig.signal_id}` });
+    if (!fresh) continue;
+    const when = new Date(expiresAt).toISOString().slice(0, 16).replace("T", " ");
+    try {
+      await ports.jira.addComment(sig.issue_key, `Lessel: ${sig.kind} ${sig.ref ?? ""} is suspected of being caused by this work item. ` +
+        `Confirm or dismiss it in the Lessel panel by ${when} UTC, or it expires as dismissed.`.replace(/\s+/g, " "));
+      n++;
+    } catch (e) {
+      console.warn(`Reminder comment failed on ${sig.issue_key}: ${e.message}`);
+    }
+  }
+  return n;
+}
+
 /** Re-check excusal for confirmed signals on items that read a source (after a taint is confirmed or its range changes). */
 async function reexcuseForSource(sourceId, cfg) {
   const reads = await repo.readsForSource(sourceId);
@@ -135,4 +160,4 @@ async function reexcuseForSource(sourceId, cfg) {
 }
 
 module.exports = { UserError, afterItemChange, maybeExcuse, confirmCause, dismissCause, reopenDecision,
-  revertLinkConfirmation, expireSuspected, reexcuseForSource, describe };
+  revertLinkConfirmation, expireSuspected, remindSuspected, reexcuseForSource, describe };

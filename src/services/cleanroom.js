@@ -123,7 +123,8 @@ async function markFixed(sourceId, actor, cleanFromVersion, cfg) {
   if (!src || src.tainted_from_version == null) throw new UserError("Confirm the taint before marking it fixed.");
   const v = Number(cleanFromVersion);
   if (!Number.isInteger(v) || v <= src.tainted_from_version) throw new UserError(`The clean version must be after v${src.tainted_from_version}.`);
-  await repo.patchSource(sourceId, { clean_from_version: v });
+  if (src.state === "quarantined") await liftQuarantine(sourceId, cfg);
+  await repo.patchSource(sourceId, { clean_from_version: v, ...(src.state === "quarantined" ? { state: "confirmed" } : {}) });
   await repo.logStaffAction({ actor, action: "mark-fixed", target: sourceId, note: `clean from v${v}` });
   await reexcuseForSource(sourceId, cfg);
   return blastRadius(sourceId);
@@ -145,6 +146,7 @@ async function restoreClean(sourceId, actor, cfg) {
   const nextVersion = (current?.version?.number ?? 0) + 1;
   await ports.confluence.updatePage(pageId, { title: current?.title ?? clean.title, storage: clean.body?.storage?.value ?? "",
     nextVersion, message: `Lessel Clean Room: restored v${cleanVersion} (tainted from v${src.tainted_from_version})` });
+  if (src.state === "quarantined") await liftQuarantine(sourceId, cfg);
   await repo.patchSource(sourceId, { state: "restored", clean_from_version: nextVersion });
   await repo.logStaffAction({ actor, action: "restore", target: sourceId, note: `v${cleanVersion} republished as v${nextVersion}` });
   await reexcuseForSource(sourceId, cfg);
@@ -152,6 +154,43 @@ async function restoreClean(sourceId, actor, cfg) {
   await notifyItems(br.items.map(i => i.issue_key), { id: `restore:${sourceId}:${nextVersion}`, rev: 0,
     text: `${src.title || src.url} was restored to its last clean content as v${nextVersion}` }, cfg);
   return br;
+}
+
+const confluencePageId = sourceId => String(sourceId).match(/^confluence:page:(\d+)$/)?.[1] ?? null;
+
+/**
+ * P4 quarantine: label the page, leave a footer comment saying which versions are tainted, and (if a
+ * quarantine group is configured) restrict reading to that group so agents can't load it. Lifted by
+ * Mark fixed or Restore.
+ */
+async function quarantine(sourceId, actor, cfg) {
+  cfg = cfg ?? await repo.getSettings();
+  const src = await repo.getSource(sourceId);
+  if (!src || !["confirmed", "restored"].includes(src.state)) throw new UserError("Only a confirmed tainted page can be quarantined.");
+  const pageId = confluencePageId(sourceId);
+  if (!pageId) throw new UserError("Only Confluence pages can be quarantined.");
+  const { quarantineLabel, quarantineGroup } = cfg.cleanRoom;
+  await ports.confluence.addLabel(pageId, quarantineLabel);
+  await ports.confluence.addFooterComment(pageId,
+    `<p><strong>Lessel Clean Room:</strong> versions in the range ${rangeText(src)} contain instructions aimed at AI agents. ` +
+    `This page is quarantined until it's fixed. Agents must not use it.</p>`);
+  if (quarantineGroup) await ports.confluence.restrictRead(pageId, quarantineGroup);
+  await repo.patchSource(sourceId, { state: "quarantined" });
+  await repo.logStaffAction({ actor, action: "quarantine", target: sourceId, note: quarantineGroup ? `read restricted to ${quarantineGroup}` : "label + comment" });
+  return blastRadius(sourceId);
+}
+
+/** Undo quarantine markers; called when a fix or restore makes the page safe again. */
+async function liftQuarantine(sourceId, cfg) {
+  const pageId = confluencePageId(sourceId);
+  if (!pageId) return;
+  try {
+    await ports.confluence.removeLabel(pageId, cfg.cleanRoom.quarantineLabel);
+    if (cfg.cleanRoom.quarantineGroup) await ports.confluence.clearRestrictions(pageId);
+    await ports.confluence.addFooterComment(pageId, "<p><strong>Lessel Clean Room:</strong> quarantine lifted; the current version is clean.</p>");
+  } catch (e) {
+    console.warn(`Couldn't fully lift quarantine on ${sourceId}: ${e.message}`);
+  }
 }
 
 async function dismissTaint(sourceId, actor) {
@@ -207,4 +246,4 @@ async function checkContext(level, sourceUrl) {
 }
 
 module.exports = { sourceRef, scanConfluencePage, scanHistory, scanJiraText, blastRadius, confirmTaint, markFixed,
-  restoreClean, dismissTaint, declareContext, checkContext };
+  restoreClean, quarantine, dismissTaint, declareContext, checkContext };

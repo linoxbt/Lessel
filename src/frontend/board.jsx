@@ -114,6 +114,9 @@ function CleanRoom() {
               <Textfield placeholder="first clean version" value={input[`${s.source_id}:fix`] ?? ""} onChange={e => setInput({ ...input, [`${s.source_id}:fix`]: e.target.value })} />
               <Button onClick={() => run("markFixed", { sourceId: s.source_id, cleanFromVersion: input[`${s.source_id}:fix`] })}>Mark fixed</Button>
               <Button appearance="subtle" onClick={() => run("dismissTaint", { sourceId: s.source_id })}>Not tainted</Button>
+              {["confirmed", "restored"].includes(s.state) && s.source_id.startsWith("confluence:page:")
+                ? <Button appearance="danger" onClick={() => run("quarantine", { sourceId: s.source_id })}>Quarantine</Button>
+                : null}
               {s.tainted_from_version > 1 && s.state !== "restored" && s.source_id.startsWith("confluence:page:")
                 ? <Button appearance="warning" onClick={() => run("restoreClean", { sourceId: s.source_id })}>Restore v{s.tainted_from_version - 1}</Button>
                 : null}

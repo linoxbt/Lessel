@@ -41,6 +41,8 @@ function makeWorld() {
   const statuses = new Map();       // sha → [{state}]
   const commitsByHead = new Map();  // head sha → [{hash, message}]
   const comments = [];              // { prId, raw }
+  const jiraComments = [];          // { key, text }
+  const confluenceCalls = [];       // quarantine calls, in order
   const issues = new Map();         // key → issue
   const links = new Map();          // id → link
   const pages = new Map();          // pageId → [{ number, createdAt, title, body, spaceId }]
@@ -69,7 +71,7 @@ function makeWorld() {
     async getStatus(id) { return { id, statusCategory: { key: id === "done" ? "done" : "indeterminate" } }; },
     async searchJql() { return []; },
     async userHas() { return true; },
-    async addComment() { return {}; },
+    async addComment(key, text) { jiraComments.push({ key, text }); return {}; },
   };
   const confluence = {
     async getPage(id, version) {
@@ -84,6 +86,11 @@ function makeWorld() {
       return best;
     },
     async getSpace() { return { key: "ENG" }; },
+    async addLabel(id, name) { confluenceCalls.push(`label+ ${id} ${name}`); },
+    async removeLabel(id, name) { confluenceCalls.push(`label- ${id} ${name}`); },
+    async addFooterComment(id, storage) { confluenceCalls.push(`comment ${id} ${storage.replace(/<[^>]+>/g, "").slice(0, 60)}`); },
+    async restrictRead(id, group) { confluenceCalls.push(`restrict ${id} ${group}`); },
+    async clearRestrictions(id) { confluenceCalls.push(`unrestrict ${id}`); },
     async updatePage(id, { title, storage, nextVersion }) {
       const vs = pages.get(String(id));
       if (nextVersion !== vs.length + 1) throw new Error(`version conflict: ${nextVersion} vs ${vs.length + 1}`);
@@ -105,7 +112,7 @@ function makeWorld() {
 
   const strip = u => String(u).replace(/[{}]/g, "").toLowerCase();
   const w = {
-    clock, prs, comments, issues, links, pages, statuses, mainLine, commitsByHead,
+    clock, prs, comments, jiraComments, confluenceCalls, issues, links, pages, statuses, mainLine, commitsByHead,
     advance(hours) { clock.t += hours * HOUR; },
     issue(key, fields = {}) {
       const i = { id: String(++seq + 10000), key, fields: { summary: `Work on ${key}`, project: { key: key.split("-")[0] },

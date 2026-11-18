@@ -5,7 +5,7 @@ const repo = require("./db/repo");
 const { ports } = require("./ports");
 const { migrateForge } = require("./db/schema");
 const { recomputeAll } = require("./services/recompute");
-const { expireSuspected } = require("./services/signals");
+const { expireSuspected, remindSuspected } = require("./services/signals");
 const { refreshItem } = require("./services/recompute");
 const { scanHistory } = require("./services/cleanroom");
 const { onPullRequest, onDeployment, onPush } = require("./events/bitbucket");
@@ -23,9 +23,10 @@ async function enqueue(body, concurrencyKey = null) {
 async function hourly() {
   const cfg = await repo.getSettings();
   for (const item of await repo.itemsPastWindow(ports.now())) await refreshItem(item.issue_key, cfg);
+  const reminded = await remindSuspected(cfg);
   const expired = await expireSuspected(cfg);
   const pairs = await recomputeAll(cfg);
-  return { expired, pairs };
+  return { reminded, expired, pairs };
 }
 
 /** Rebuild history from REST (§10.6). Safe to run repeatedly: every write is idempotent. */

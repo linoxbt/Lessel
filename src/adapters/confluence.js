@@ -53,6 +53,45 @@ async function updatePage(pageId, { title, storage, nextVersion, message }) {
   return readJson(res, "update page");
 }
 
+/** Quarantine helpers [verify v1 label/restriction endpoints on a live site]. */
+async function addLabel(pageId, name) {
+  const { route } = api();
+  const res = await api().asApp().requestConfluence(route`/wiki/rest/api/content/${pageId}/label`, {
+    method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify([{ prefix: "global", name }]),
+  });
+  return readJson(res, "add label");
+}
+async function removeLabel(pageId, name) {
+  const { route } = api();
+  const res = await api().asApp().requestConfluence(route`/wiki/rest/api/content/${pageId}/label/${name}`, { method: "DELETE" });
+  if (res.status === 404) return null;
+  return readJson(res, "remove label");
+}
+async function addFooterComment(pageId, storage) {
+  const { route } = api();
+  const res = await api().asApp().requestConfluence(route`/wiki/api/v2/footer-comments`, {
+    method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ pageId: String(pageId), body: { representation: "storage", value: storage } }),
+  });
+  return readJson(res, "footer comment");
+}
+/** Restrict reading to one group (the quarantine reviewers). */
+async function restrictRead(pageId, group) {
+  const { route } = api();
+  const res = await api().asApp().requestConfluence(route`/wiki/rest/api/content/${pageId}/restriction`, {
+    method: "PUT", headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify([{ operation: "read", restrictions: { group: [{ type: "group", name: group }] } }]),
+  });
+  return readJson(res, "restrict page");
+}
+async function clearRestrictions(pageId) {
+  const { route } = api();
+  const res = await api().asApp().requestConfluence(route`/wiki/rest/api/content/${pageId}/restriction`, { method: "DELETE" });
+  if (res.status === 404) return null;
+  return readJson(res, "clear restrictions");
+}
+
 async function getSpace(spaceId) {
   const { route } = api();
   return get(route`/wiki/api/v2/spaces/${spaceId}`);
@@ -64,4 +103,5 @@ function pageIdFromUrl(url) {
   return s.match(/\/pages\/(\d+)/)?.[1] ?? s.match(/[?&]pageId=(\d+)/)?.[1] ?? null;
 }
 
-module.exports = { getPage, updatePage, listVersions, versionAt, getSpace, pageIdFromUrl };
+module.exports = { getPage, updatePage, listVersions, versionAt, getSpace, pageIdFromUrl,
+  addLabel, removeLabel, addFooterComment, restrictRead, clearRestrictions };
