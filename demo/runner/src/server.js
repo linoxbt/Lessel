@@ -13,7 +13,11 @@ import { workOn, SerialQueue } from "./work.js";
 
 export function createServer(cfg, overrides = {}) {
   const store = overrides.store ?? new TaskStore(cfg.taskFile);
-  const verify = overrides.verify ?? (cfg.skipFit ? async () => ({}) : makeVerifier({ appId: cfg.forgeAppId, jwksUrl: cfg.jwksUrl }));
+  // Without an app id the runner stays up (health checks pass) but refuses every A2A request.
+  const verify = overrides.verify ?? (cfg.skipFit ? async () => ({})
+    : cfg.forgeAppId && !/^<|0{8}-0{4}/.test(cfg.forgeAppId) ? makeVerifier({ appId: cfg.forgeAppId, jwksUrl: cfg.jwksUrl })
+      : async () => { throw new Error("FORGE_APP_ID is not configured"); });
+  if (!overrides.verify && !cfg.skipFit && !cfg.forgeAppId) console.warn("FORGE_APP_ID isn't set: every A2A request will be refused.");
   if (cfg.skipFit) console.warn("A2A_SKIP_FIT=1: Forge Invocation Tokens are NOT verified. Local testing only.");
   const queues = new Map();
   const routes = new Map(Object.values(cfg.agents).map(a => [a.route, a]));

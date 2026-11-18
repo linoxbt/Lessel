@@ -7,9 +7,10 @@ import { fileURLToPath } from "node:url";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(here, "..");
 
+/** Config from RUNNER_CONFIG_JSON (hosted), else RUNNER_CONFIG / agents.json (local). */
 export function loadConfig(file = process.env.RUNNER_CONFIG ?? path.join(ROOT, "agents.json")) {
-  const raw = JSON.parse(readFileSync(file, "utf8"));
-  const dataDir = path.resolve(ROOT, raw.dataDir ?? "data");
+  const raw = process.env.RUNNER_CONFIG_JSON ? JSON.parse(process.env.RUNNER_CONFIG_JSON) : JSON.parse(readFileSync(file, "utf8"));
+  const dataDir = path.resolve(ROOT, process.env.RUNNER_DATA_DIR ?? raw.dataDir ?? "data");
   const agents = {};
   for (const [id, a] of Object.entries(raw.agents ?? {})) {
     const env = k => (a[k] ? process.env[a[k]] : undefined);
