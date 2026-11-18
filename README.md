@@ -33,7 +33,8 @@ deployed yet: deploying needs your Atlassian login.
 | Teamwork Graph (§10.5): saved Cypher queries; incidents linked in the graph become associated signals when the panel opens; commit → PR → deployment counts in the panel | Built, tested with a fake graph; queries register with `scripts/register-graph-queries.js` |
 | P4: agent start validator, Clean Room restore (republish last clean version), History tab | Built, tested |
 | Judge snapshot export/import (no person ids; "Imported history" banner) | Built, round-trip tested |
-| P4: page quarantine (restrictions API), LLM scan stage | Not built (cut order) |
+| P4: Clean Room LLM stage (Qwen via Fortytwo, or Forge LLMs), quote-grounded and advisory | Built, tested with a fake Qwen |
+| P4: page quarantine (restrictions API) | Not built (cut order) |
 
 ## Layout
 
@@ -109,7 +110,8 @@ npm run lint:offline          # Forge's own client-side linters (scopes, endpoin
 
 - Every OAuth scope in the manifest exists in Forge's scope list. Forge's linter maps every trigger event in the
   manifest to a scope, so it recognises all the event names.
-- Rovo `action` supports `actionVerb` + `inputs`. `llm` takes `model: [claude]`. `scheduledTrigger` intervals are
+- Rovo `action` supports `actionVerb` + `inputs`. The Forge `llm` module only offers `model: [claude]`, which is
+  why Qwen goes through egress instead. `scheduledTrigger` intervals are
   `fiveMinute | hour | day | week`. `nodejs22.x` is a valid runtime.
 - The Forge queue supports per-key concurrency (`{ key, limit }`), so jobs can be serialised per key.
 - `TIMESTAMP` columns reject 1970-01-01 00:00:00, so the recompute watermark floor is 2000-01-01. The end-to-end
@@ -136,6 +138,30 @@ Each one is marked `[verify]` in the code. The full list is in the spec appendix
 - Confluence v2 version-history pagination.
 - The work-item ARI format for graph parameters (`ari:cloud:jira:<cloudId>:issue/<issueId>`), and whether Basic
   auth with an API token is accepted for registering saved queries.
+
+## AI providers
+
+Lessel's in-app AI covers two features. Both are advisory, and neither ever runs in the merge check:
+- the change-class fallback when the path map has no answer;
+- the Clean Room LLM stage.
+
+Setting `ai.provider` chooses who runs it:
+
+| `ai.provider` | Model | Notes |
+|---|---|---|
+| `qwen` (default) | `qwen/qwen3.8-27b` on Fortytwo (`https://api.fortytwo.network/v1`) | `forge variables set --encrypt FORTYTWO_API_KEY sk-ft-v1-…`. The manifest declares this egress host with `inScopeEUD: true`, because ticket and page text is sent there. **Declaring it removes "Runs on Atlassian" eligibility.** |
+| `forge` | Forge LLMs (Atlassian-hosted) | No outside calls. To get Runs on Atlassian back, also delete the `external.fetch` entry from `manifest.yml`. |
+
+If the provider fails, Lessel falls back to a safe default ("refactor", or no LLM finding). It never silently
+switches to the other provider.
+
+The LLM stage (`ai.llmScan`) has three settings:
+- `suspect` (default): explains pages the deterministic filters already flagged.
+- `all`: also reviews every in-scope page, and can flag a page the filters missed. It only counts when the
+  model quotes the page verbatim, and a human still confirms every taint.
+- `off`: no LLM stage.
+
+The demo agents (`demo/runner`) also use Qwen on Fortytwo.
 
 ## Deviations from the spec
 

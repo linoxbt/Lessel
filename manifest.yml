@@ -265,6 +265,13 @@ resources:
     path: src/frontend/admin.jsx
 
 permissions:
+  external:
+    fetch:
+      backend:
+        # Qwen via Fortytwo (settings.ai.provider = "qwen"). Ticket and page text is sent there, so inScopeEUD is true.
+        # Remove this entry (and use provider "forge") to restore Runs on Atlassian eligibility.
+        - address: https://api.fortytwo.network
+          inScopeEUD: true
   scopes:
     - read:jira-work
     - write:jira-work

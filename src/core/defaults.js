@@ -54,7 +54,13 @@ const DEFAULTS = Object.freeze({
     { pattern: "src/ui/strings/**", cls: "docs-copy" },
   ],
   graphQueries: { incidents: null, devChain: null },
-  importedSnapshot: null,                     // set when history was imported for judges (shown on every board)  // queryKeys from scripts/register-graph-queries.js
+  importedSnapshot: null,
+  ai: {
+    provider: "qwen",                         // "qwen" (Fortytwo, egress) | "forge" (Forge LLMs, Atlassian-hosted)
+    qwen: { baseUrl: "https://api.fortytwo.network/v1", model: "qwen/qwen3.8-27b", apiKeyEnv: "FORTYTWO_API_KEY",
+      reasoningEffort: "low" },
+    llmScan: "suspect",                       // Clean Room LLM stage: "suspect" pages only | "all" pages | "off"
+  },                     // set when history was imported for judges (shown on every board)  // queryKeys from scripts/register-graph-queries.js
   cleanRoom: {
     confluenceSpaces: ["ENG"],
     jiraProjects: ["PAY"],

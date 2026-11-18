@@ -4,7 +4,7 @@
 const crypto = require("crypto");
 const repo = require("../db/repo");
 const { ports } = require("../ports");
-const { scan, isSuspect } = require("../core/taint");
+const { scan, isSuspect, stripTags } = require("../core/taint");
 const { checkDeclaration, inTaintedRange, rangeText, contextGate } = require("../core/cleanroom");
 const { UserError, reexcuseForSource } = require("./signals");
 const { notifyItems } = require("./notify");
@@ -32,14 +32,30 @@ async function scanConfluencePage(pageId, version, cfg) {
   const source_id = `confluence:page:${pageId}`;
   const url = page._links?.base && page._links?.webui ? `${page._links.base}${page._links.webui}` : `confluence:${pageId}`;
   const src = await repo.upsertSource({ source_id, url, title: page.title });
-  const findings = scan(page.body?.storage?.value ?? "", { allowedDomains: cfg.cleanRoom.allowedDomains });
+  const storage = page.body?.storage?.value ?? "";
+  const findings = scan(storage, { allowedDomains: cfg.cleanRoom.allowedDomains });
   for (const f of findings) await repo.addFinding({ source_id, version: v, ...f });
-  if (isSuspect(findings) && (src.state === "unscanned" || src.state === "clean" || src.state === "restored")) {
+  let suspect = isSuspect(findings);
+
+  // LLM stage (P4): advisory. On suspect pages it explains; with llmScan "all" it can also flag a page the
+  // deterministic filters missed, but only with a verbatim quote, and a human still confirms every taint.
+  const mode = cfg.ai?.llmScan ?? "suspect";
+  if (mode === "all" || (mode === "suspect" && suspect)) {
+    const review = await ports.llm.reviewForInjection({ title: page.title, text: stripTags(storage) }, cfg);
+    if (review && review.verdict !== "benign") {
+      const quote = review.quote ? `“${review.quote}” — ${review.reason}` : review.reason;
+      await repo.addFinding({ source_id, version: v, filter: `llm-${review.verdict}`, offset: 0, quote: quote || review.verdict });
+      findings.push({ filter: `llm-${review.verdict}`, offset: 0, quote });
+      if (review.verdict === "injection" && review.quote) suspect = true;
+    }
+  }
+
+  if (suspect && (src.state === "unscanned" || src.state === "clean" || src.state === "restored")) {
     await repo.patchSource(source_id, { state: "suspect", rationale: `v${v}: ${[...new Set(findings.map(f => f.filter))].join(", ")}` });
-  } else if (!isSuspect(findings) && src.state === "unscanned") {
+  } else if (!suspect && src.state === "unscanned") {
     await repo.patchSource(source_id, { state: "clean" });
   }
-  return { source_id, version: v, findings };
+  return { source_id, version: v, findings, suspect };
 }
 
 /** Scan every version (when Clean Room is enabled after the fact, or before confirming). */
@@ -48,7 +64,7 @@ async function scanHistory(pageId, cfg) {
   const flagged = [];
   for (const { number } of versions) {
     const r = await scanConfluencePage(pageId, number, cfg);
-    if (r && isSuspect(r.findings)) flagged.push(number);
+    if (r?.suspect) flagged.push(number);
   }
   return { versions: versions.map(v => v.number), flagged, suggestedFrom: flagged[0] ?? null };
 }

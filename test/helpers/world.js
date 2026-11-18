@@ -91,7 +91,15 @@ function makeWorld() {
       return { id, version: { number: nextVersion } };
     },
   };
-  const llm = { async classifyClass() { return { change_class: "business-logic", confidence: 0.5 }; } };
+  // Fake Qwen: flags text that tells agents to weaken safety, quoting the sentence verbatim.
+  const llm = {
+    async classifyClass() { return { change_class: "business-logic", confidence: 0.5 }; },
+    async reviewForInjection({ text }) {
+      const m = String(text).match(/[^.]*(?:max_rps to 0|copy the admin token)[^.]*\./i);
+      return m ? { verdict: "injection", quote: m[0].trim(), reason: "Tells agents to weaken safety." }
+        : { verdict: "benign", quote: "", reason: "" };
+    },
+  };
 
   setPorts({ bitbucket, jira, confluence, llm, now: () => new Date(clock.t) });
 

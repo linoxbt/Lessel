@@ -25,7 +25,7 @@ async function remember(shapeId, cfg) {
 async function provisionalShape({ summary, description, components = [] }, cfg) {
   const componentService = components.map(c => c?.name).find(n => cfg.servicePaths.some(r => r.service === n));
   const service = componentService ?? Object.values(cfg.repos)[0]?.defaultService ?? cfg.servicePaths[0]?.service ?? "default";
-  const { change_class } = await ports.llm.classifyClass({ summary, description, paths: [] });
+  const { change_class } = await ports.llm.classifyClass({ summary, description, paths: [] }, cfg);
   const shape_id = S.shapeId(service, change_class);
   await remember(shape_id, cfg);
   return { shape_id, classified_by: "llm" };
@@ -39,7 +39,7 @@ async function finalShapeForPaths({ paths, summary, description, repoDefaultServ
   let cls = S.classFromPaths(paths, rules);
   let classified_by = "path";
   if (!cls) {
-    cls = (await ports.llm.classifyClass({ summary, description, paths: paths.slice(0, 200) })).change_class;
+    cls = (await ports.llm.classifyClass({ summary, description, paths: paths.slice(0, 200) }, cfg)).change_class;
     classified_by = "llm";
   }
   const shape_id = S.shapeId(service, cls);

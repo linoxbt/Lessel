@@ -27,6 +27,7 @@ const EDITABLE = [
   ["suspectedExpiryHours", "Hours after the window before suspected signals expire"],
   ["teamBaseline", "Team baseline floors"],
   ["cleanRoom", "Clean Room scope and allowed link domains"],
+  ["ai", "AI provider: \"qwen\" (Fortytwo, needs FORTYTWO_API_KEY) or \"forge\" (Forge LLMs); llmScan: suspect | all | off"],
   ["graphQueries", "Teamwork Graph saved-query keys (from scripts/register-graph-queries.js)"],
 ];
 

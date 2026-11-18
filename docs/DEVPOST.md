@@ -41,10 +41,14 @@ production. We wanted agents to earn autonomy the way a new engineer does.
 | Confluence | Page events and version history for Clean Room scanning; restoring the last clean version |
 | Teamwork Graph | Saved Cypher queries: incidents linked to a work item (`jsm_incident_links_jira_work_item`) become signals when anyone views it, and the commit → PR → deployment chain is shown as evidence |
 | Rovo | The Dispatcher agent + skill (who should take this ticket?), Rovo actions, and a `rovo:mcp` server whose tools bind identity to the calling account |
-| Forge platform | Forge SQL, Forge LLMs (change-class fallback), async events queue, scheduled trigger. No remotes, no egress |
+| Forge platform | Forge SQL, async events queue, scheduled trigger, no remotes. AI is Qwen (Qwen3.8-27B via Fortytwo, one declared egress host), with Forge LLMs as an Atlassian-hosted alternative in settings |
 
 Our test agents live in a **separate** Forge app with two `rovo:agentConnector` modules (Atlas and Brook),
 backed by an A2A 1.0 runner that codes with Qwen (Qwen3.8-27B via Fortytwo). Lessel itself has no remotes. It works with anyone's agents.
+
+**AI in Lessel** is deliberately small and advisory. Qwen classifies a change only when the path map can't, and
+reviews suspect Confluence pages, quoting the exact poisoned sentence. A quote that isn't verbatim in the page
+is discarded, and a human confirms every taint.
 
 **Engineering choices we're proud of:**
 - One `decide()` function behind every surface.
