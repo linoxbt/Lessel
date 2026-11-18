@@ -7,11 +7,13 @@ const Ajv = require("ajv");
 const schema = JSON.parse(fs.readFileSync(
   path.join(path.dirname(require.resolve("@forge/manifest")), "schema", "manifest-schema.json"), "utf8"));
 
-const manifest = YAML.parse(fs.readFileSync(path.join(__dirname, "..", "manifest.yml"), "utf8"));
+// Optional argument: another app directory (e.g. demo/agents-app). Default: this repo's Lessel app.
+const appDir = path.resolve(process.argv[2] ?? path.join(__dirname, ".."));
+const manifest = YAML.parse(fs.readFileSync(path.join(appDir, "manifest.yml"), "utf8"));
 const ajv = new Ajv({ allErrors: true, strict: false, validateFormats: false });
 const validate = ajv.compile(schema);
 if (validate(manifest)) {
-  console.log("manifest.yml matches the @forge/manifest schema");
+  console.log(`${path.relative(process.cwd(), appDir) || "."}/manifest.yml matches the @forge/manifest schema`);
 } else {
   // oneOf failures are noisy; show the deepest, most specific errors first
   const errs = validate.errors

@@ -1,0 +1,21 @@
+{
+  "name": "lessel-demo-runner",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A2A runner behind the Atlas and Brook agent connectors (Lessel demo rig)",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test test/*.test.js",
+    "mcp-login": "node src/mcp-login.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.10.0",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "jose": "^6.2.17",
+    "zod": "^4.6.7"
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "port": 8787,
+  "forgeAppId": "<Lessel Demo Agents app id (the UUID after ari:cloud:ecosystem::app/)>",
+  "siteUrl": "https://YOUR-SITE.atlassian.net",
+  "lesselMcpUrl": "https://mcp.atlassian.com/forge/<Lessel app id>",
+  "repo": { "workspace": "<bitbucket workspace slug>", "slug": "ledger-service", "mainBranch": "main" },
+  "dataDir": "data",
+  "agents": {
+    "brook": {
+      "name": "Brook",
+      "route": "/a2a/brook",
+      "persona": "careful",
+      "effort": "high",
+      "gitAuthorName": "Brook (agent)",
+      "gitAuthorEmail": "brook-agent@example.com",
+      "bitbucketEmail": "brook-agent@example.com",
+      "bitbucketTokenEnv": "BROOK_BITBUCKET_TOKEN",
+      "atlassianEmail": "brook-agent@example.com",
+      "atlassianTokenEnv": "BROOK_ATLASSIAN_TOKEN"
+    },
+    "atlas": {
+      "name": "Atlas",
+      "route": "/a2a/atlas",
+      "persona": "fast",
+      "effort": "low",
+      "gitAuthorName": "Atlas (agent)",
+      "gitAuthorEmail": "atlas-agent@example.com",
+      "bitbucketEmail": "atlas-agent@example.com",
+      "bitbucketTokenEnv": "ATLAS_BITBUCKET_TOKEN",
+      "atlassianEmail": "atlas-agent@example.com",
+      "atlassianTokenEnv": "ATLAS_ATLASSIAN_TOKEN"
+    }
+  }
+}

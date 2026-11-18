@@ -20,7 +20,8 @@ const req = m => require(require.resolve(m, { paths: [cliDir] }));
 const { lint, reportLintResults, problemCount } = req("@forge/lint");
 const YAML = req("yaml");
 
-const appDir = path.resolve(__dirname, "..");
+// Optional argument: another app directory (e.g. demo/agents-app). Default: this repo's Lessel app.
+const appDir = path.resolve(process.argv[2] ?? path.join(__dirname, ".."));
 process.chdir(appDir);
 const manifest = YAML.parse(fs.readFileSync("manifest.yml", "utf8"));
 const files = [];
@@ -29,7 +30,7 @@ const files = [];
     const p = path.join(d, f.name);
     if (f.isDirectory()) walk(p); else if (/\.(js|jsx|ts|tsx)$/.test(f.name)) files.push(p);
   }
-})("src");
+})(fs.existsSync("src") ? "src" : ".");
 
 // Feature-flag service stub: no remote flags offline.
 const statsig = new Proxy({}, { get: (_, k) => async () => (k === "getDeprecatedRuntimes" ? [] : false) });
