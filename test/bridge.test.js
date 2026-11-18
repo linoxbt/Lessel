@@ -53,6 +53,7 @@ test("bridge: unsigned requests get 401; signed ones reach the gate and the even
       assert.equal(ev.statusCode, 200);
       assert.equal((await bitbucketBridge(req({ kind: "nope" }))).statusCode, 400);
       assert.equal((await bitbucketBridge(req({ kind: "run-job", type: "backfill" }))).statusCode, 400, "only migrate and hourly");
+      assert.equal((await bitbucketBridge(req({ kind: "dismiss-taint", sourceId: "x; DROP" }))).statusCode, 400, "source ids are validated");
       await withModule("../src/jobs", { enqueue: async b => { seen.push(["job", b.type]); } }, async () => {
         assert.equal((await bitbucketBridge(req({ kind: "run-job", type: "migrate" }))).statusCode, 202);
       });

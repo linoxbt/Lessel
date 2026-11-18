@@ -4,6 +4,7 @@
 //   { kind: "merge-check", event }      the Bitbucket merge check, from Lessel for Bitbucket
 //   { kind: "confluence-event", event } Confluence events, from Lessel's own Confluence installation
 //   { kind: "run-job", type }           operator hook: "migrate" or "hourly"
+//   { kind: "dismiss-taint", sourceId } operator hook: clear a false positive, as an admin's Dismiss would
 // Requests must be signed with LESSEL_BRIDGE_SECRET (see bridge-sign.js); anything else gets 401.
 
 const { verify } = require("./bridge-sign");
@@ -36,6 +37,11 @@ async function bitbucketBridge(req) {
       const { onConfluenceEvent } = require("./events/confluence");
       await onConfluenceEvent(msg.event ?? {});
       return reply(200, { ok: true });
+    }
+    if (msg.kind === "dismiss-taint" && /^confluence:page:\d+$|^jira:issue:[A-Z][A-Z0-9]+-\d+$/.test(String(msg.sourceId))) {
+      // Operator hook: clear a false positive (same effect and audit entry as an admin's Dismiss in Clean Room).
+      await require("./services/cleanroom").dismissTaint(msg.sourceId, "lessel:operator");
+      return reply(200, { dismissed: msg.sourceId });
     }
     if (msg.kind === "run-job" && ["migrate", "hourly"].includes(msg.type)) {
       // Operator hook (same secret as merge verdicts): queue a migration or a sweep without waiting for a trigger.

@@ -21,6 +21,9 @@ v1.2 for the design, and this page for where the build differs. Section numbers 
 | Holds | Derived (v1.2) | Derived, as in v1.2. Probation "new clean" means merged strictly after the confirmation | Confirmed in tests |
 | Shape rules | Risk-ordered classes | Same, plus: **test-file rules match first per file**, so a test-only change inside `src/domain` is `test-fix` | A real misclassification found while wiring the demo repo |
 | Teamwork Graph | Graph sweep from triggers if `asApp()` works | **`requestTeamworkGraph` is `asUser()` only** (confirmed in `@forge/api` types). Saved Cypher queries via `customQuery`; incidents found in the graph become *associated* signals when someone opens the issue panel; the dev chain shows in the panel | Raw `cypherQuery` isn't available to new apps, and triggers can't use the graph |
+| Installation topology (§5.1) | `[verify — blocking]` | **Answered on the live site: two apps.** Forge rejects one app with both site and workspace scopes ("Workspace scopes can not be used with site scopes"). Lessel (Jira + Confluence) holds all data; **Lessel for Bitbucket** forwards Bitbucket events and asks Lessel for the merge verdict over an HMAC-signed web trigger, and fails closed when Lessel can't answer. Lessel reads Bitbucket's REST API with a scoped token. This is design B of §5.1, with the web trigger as the link | Found by `forge deploy` |
+| Installations | One | Forge lists Lessel's Jira and Confluence installs separately, and Forge SQL keeps **one database per installation**. Confluence events are forwarded to the Jira installation over the same signed link | Found when migrations created the schema twice |
+| Queue consumer | `resolver` + `method` | A plain `function`: the queue's event schema v2 rejects resolver consumers. Forge SQL must be declared (`sql` module) | Found deploying |
 | Demo hosting | "Your A2A server" | Railway project `lessel-demo`: ledger staging + Postgres, and the runner with a persistent volume. Both deploy from `main` and only rebuild when their own folder changes | Gives the Demo Agents app a stable HTTPS address |
 
 ## 1a. Rules tightened after the security review
@@ -65,7 +68,6 @@ against the code before it was fixed, and each fix has a regression test.
 
 ## 3. Still to confirm on a live site
 
-- **[blocking] Installation topology (§5.1):** does the merge check read what the Jira side writes?
 - **MCP caller identity:** which accountId arrives for MCP calls (the code checks `context.principal.accountId` first).
 - **Payload shapes:** merge-check payload; Bitbucket and Confluence event payloads; the issue-link creator field.
 - **Bitbucket APIs:** merge-base for deployment containment; brace handling in UUID paths; API-token usernames

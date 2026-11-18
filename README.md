@@ -91,13 +91,24 @@ npm run lint:offline          # Forge's own client-side linters (scopes, endpoin
 
 Every account, key and ID you need, where to get each one and where it goes: [`docs/SETUP_CHECKLIST.md`](docs/SETUP_CHECKLIST.md).
 
+Lessel is **two Forge apps**: Forge won't let one app hold site scopes (Jira, Confluence) and workspace scopes
+(Bitbucket), so `bitbucket-app/` (Lessel for Bitbucket) forwards Bitbucket events and the merge check to Lessel
+over a signed web trigger. All data and decisions stay in Lessel's Jira installation.
+
 1. `npm i -g @forge/cli`, then `forge login` with an Atlassian API token.
-2. `forge register` to replace the placeholder app id in `manifest.yml`.
-3. `forge lint`, then `forge deploy -e development`.
-4. `forge install -e development` on your Jira site (Jira + Confluence), and on the Bitbucket **team** workspace.
-   **Do week-1 check #0 now** (§5.1): confirm that the merge check reads what the Jira side writes. If it
-   doesn't, tell me and we switch to design B or C.
-5. Migrations run on install (lifecycle trigger). The settings page also has a **Run migrations** button.
+2. Lessel: `forge register`, `forge deploy -e development`, then `forge install -e development -p jira` and
+   `-p confluence` on your site. Installed on lessel.atlassian.net already.
+3. Connect the two apps:
+   - `forge webtrigger create -f bitbucket-bridge -p jira -s <site>` gives the bridge URL.
+   - Generate a secret (`openssl rand -hex 32`). In **both** apps:
+     `forge variables set --encrypt LESSEL_BRIDGE_SECRET <secret>` and `forge variables set LESSEL_BRIDGE_URL <url>`.
+   - In Lessel: `forge variables set BITBUCKET_EMAIL <email>` and
+     `forge variables set --encrypt BITBUCKET_API_TOKEN <token>`. The token is a scoped Bitbucket API token
+     with repository read, pull request read/write and pipeline read.
+   - Redeploy after setting variables.
+4. Lessel for Bitbucket: in `bitbucket-app/`, `npm install`, `forge register`, `forge deploy`, and
+   `forge install -p bitbucket` on your workspace.
+5. Migrations run on install and before every background job; the settings page also has **Run migrations**.
 6. In **Lessel settings** (Jira admin):
    - Add Brook and Atlas, and map each agent's Jira, Bitbucket and MCP accounts.
    - Set `repos` to `{ "<repo uuid without braces>": { "workspace": "<workspace uuid>", "deploys": true,

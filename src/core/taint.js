@@ -15,6 +15,8 @@ const DISABLE_CHECKS = [
   /\b(?:rate[ _-]?limits?|max_rps|rps|max_requests)\b[^.\n]{0,30}\b(?:to|=|:)\s*0\b/i,
 ];
 
+const NEGATED = /\b(?:never(?! ?mind)|don'?t|do not|must not|mustn'?t|should not|shouldn'?t|cannot|can'?t|avoid|no one should)\b/i;
+
 const HIDDEN_STYLE = /style\s*=\s*"[^"]*(?:color\s*:\s*(?:#fff(?:fff)?\b|white|rgba?\([^)]*,\s*0\))|font-size\s*:\s*0(?:px|pt|em)?\b|display\s*:\s*none|visibility\s*:\s*hidden|opacity\s*:\s*0(?:\.0+)?\b)[^"]*"/i;
 const BASE64 = /[A-Za-z0-9+/]{200,}={0,2}/;
 const URL = /\bhttps?:\/\/([a-z0-9.-]+)/gi;
@@ -50,7 +52,11 @@ function scan(body, { allowedDomains = [] } = {}) {
 
   const plainIdx = (re) => { const m = text.match(re); return m ? [m.index, m[0].length] : null; };
   for (const re of AI_ADDRESSED) { const h = plainIdx(re); if (h) { add("ai-addressed", ...h); break; } }
-  for (const re of DISABLE_CHECKS) { const h = plainIdx(re); if (h) { add("disable-checks", ...h); break; } }
+  // A negated instruction ("Never set max_rps to 0", "Do not skip the tests") is a safety rule, not an attack.
+  const plain = stripTags(text);
+  const disable = DISABLE_CHECKS.some(re => [...plain.matchAll(new RegExp(re.source, "gi"))].some(m => !NEGATED.test(
+    plain.slice(Math.max(0, m.index - 40), m.index).split(/[.!?:;\n]/).pop())));
+  if (disable) for (const re of DISABLE_CHECKS) { const h = plainIdx(re); if (h) { add("disable-checks", ...h); break; } }
   const b64 = plainIdx(BASE64); if (b64) add("base64", ...b64);
 
   for (const m of text.matchAll(URL)) if (!hostAllowed(m[1], allowedDomains)) add("link", m.index, m[0].length);
