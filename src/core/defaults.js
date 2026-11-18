@@ -53,7 +53,8 @@ const DEFAULTS = Object.freeze({
     { pattern: "docs/**", cls: "docs-copy" },
     { pattern: "src/ui/strings/**", cls: "docs-copy" },
   ],
-  graphQueries: { incidents: null, devChain: null },  // queryKeys from scripts/register-graph-queries.js
+  graphQueries: { incidents: null, devChain: null },
+  importedSnapshot: null,                     // set when history was imported for judges (shown on every board)  // queryKeys from scripts/register-graph-queries.js
   cleanRoom: {
     confluenceSpaces: ["ENG"],
     jiraProjects: ["PAY"],

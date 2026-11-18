@@ -12,6 +12,7 @@ const { decide } = require("../services/decide");
 const signals = require("../services/signals");
 const cleanroom = require("../services/cleanroom");
 const graph = require("../services/graph");
+const snapshot = require("../services/snapshot");
 
 class Forbidden extends Error {}
 
@@ -55,6 +56,9 @@ async function board() {
     shapeIds, cells, team,
     mode: cfg.enforcementMode,
     windowNote: cfg.windowHours !== DEFAULTS.windowHours ? `Observation window: ${cfg.windowHours / 24} days (demo setting)` : null,
+    importedNote: cfg.importedSnapshot
+      ? `Imported history: a snapshot of real history exported ${cfg.importedSnapshot.exportedAt.slice(0, 10)} from the demo site. New PRs on this site are gated live.`
+      : null,
   };
 }
 
@@ -181,6 +185,15 @@ const DEFINITIONS = {
     before: safeJson(e.before_json), after: safeJson(e.after_json) })),
   dismissTaint: async ({ payload, context }) => { await requireAdmin(); await cleanroom.dismissTaint(payload.sourceId, context.accountId); return sources(); },
   scanHistory: async ({ payload }) => { await requireAdmin(); return require("../jobs").enqueue({ type: "scan-history", pageId: payload.pageId }); },
+  exportSnapshot: async () => { await requireAdmin(); return { json: JSON.stringify(await snapshot.exportSnapshot()) }; },
+  importSnapshot: async ({ payload }) => {
+    await requireAdmin();
+    let parsed;
+    try { parsed = JSON.parse(payload.json); } catch { throw new signals.UserError("That isn't valid JSON."); }
+    const imported = await snapshot.importSnapshot(parsed);
+    await require("../services/recompute").recomputeAll();
+    return { imported };
+  },
   runJob: async ({ payload }) => {
     await requireAdmin();
     if (!["backfill", "migrate", "recompute-all"].includes(payload.type)) throw new Error("Unknown job.");

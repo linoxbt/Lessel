@@ -378,3 +378,30 @@ test("P4: start validator blocks an ineligible agent; restore republishes the la
   const history = await ui.DEFINITIONS.getHistory({});
   assert.ok(history.some(h => h.agentId === "brook" && h.shapeId === "ledger/schema-migration" && /INC-42/.test(h.cause)));
 });
+
+test("judge snapshot: export strips person ids; import into a fresh site reproduces records, labelled as imported", async (t) => {
+  if (!pool) return t.skip("no test database");
+  const snapshotSvc = require("../src/services/snapshot");
+  const { recomputeAll } = require("../src/services/recompute");
+  const snap = await snapshotSvc.exportSnapshot();
+  const text = JSON.stringify(snap);
+  assert.ok(!text.includes("oncall-1") && !text.includes("admin-1"), "no person account ids in the export");
+  assert.ok(snap.tables.signals.some(s => s.decided_by === "staff"));
+  assert.ok(snap.tables.signals.some(s => s.decided_by === "lessel:revert"), "system actors are kept");
+  assert.ok(!("staff_actions" in snap.tables));
+  const before = (await repo.allRecords()).map(r => [r.subject_id, r.shape_id, r.clean, r.total, r.earned_level]);
+
+  await resetSchema(pool);                       // a judge's fresh install
+  const imported = await snapshotSvc.importSnapshot(JSON.parse(text));
+  assert.equal(imported.work_items, snap.counts.work_items);
+  await recomputeAll();
+  const after = (await repo.allRecords()).map(r => [r.subject_id, r.shape_id, r.clean, r.total, r.earned_level]);
+  assert.deepEqual(after, before, "recomputing imported history gives the same records");
+
+  const cfg = await repo.getSettings();
+  assert.equal(cfg.enforcementMode, "advisory");
+  const board = await ui.board();
+  assert.match(board.importedNote, /^Imported history: a snapshot of real history exported \d{4}-\d\d-\d\d/);
+  await assert.rejects(snapshotSvc.importSnapshot(JSON.parse(text)), /already has history/);
+  await assert.rejects(snapshotSvc.importSnapshot({ format: "nope" }), /Not a lessel-snapshot\/1 file/);
+});

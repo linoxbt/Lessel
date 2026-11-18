@@ -77,6 +77,27 @@ function Agents({ view, act }) {
   );
 }
 
+function Snapshot() {
+  const [out, setOut] = useState("");
+  const [paste, setPaste] = useState("");
+  const [msg, setMsg] = useState(null);
+  return (
+    <Stack space="space.100">
+      <Text>Export copies this site's agent history without any person's account id. Import works only on a fresh install and labels the board "Imported history".</Text>
+      <ButtonGroup>
+        <Button onClick={async () => { const r = await invoke("exportSnapshot"); r?.error ? setMsg(r.error) : setOut(r.json); }}>Export snapshot</Button>
+        <Button appearance="primary" isDisabled={!paste.trim()} onClick={async () => {
+          const r = await invoke("importSnapshot", { json: paste });
+          setMsg(r?.error ?? `Imported ${r.imported.work_items} work items, ${r.imported.signals} signals, ${r.imported.records} records.`);
+        }}>Import pasted snapshot</Button>
+      </ButtonGroup>
+      {msg ? <Text>{msg}</Text> : null}
+      {out ? <TextArea value={out} isReadOnly /> : null}
+      <TextArea placeholder="Paste a snapshot here to import it" value={paste} onChange={e => setPaste(e.target.value)} />
+    </Stack>
+  );
+}
+
 function App() {
   const [view, setView] = useState(null);
   const [error, setError] = useState(null);
@@ -111,6 +132,8 @@ function App() {
         <Button onClick={() => act("runJob", { type: "recompute-all" })}>Recompute all</Button>
       </ButtonGroup>
       <Text>Before enforcing: set the native minimum approvals on gated branches to 0, mark the Lessel check as Required (Bitbucket Premium), turn on "reset approvals when the source branch changes", and add the Lessel validator to the Ready to merge transition.</Text>
+      <Heading as="h3">History snapshot (for judges)</Heading>
+      <Snapshot act={act} />
       <Heading as="h3">Settings</Heading>
       <Box>
         <Stack space="space.200">

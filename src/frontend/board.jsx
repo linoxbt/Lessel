@@ -158,6 +158,7 @@ function App() {
   if (!data) return error ? <ErrorMessage error={error} /> : <Spinner />;
   return (
     <Stack space="space.200">
+      {data.importedNote ? <SectionMessage appearance="discovery" title="Imported history"><Text>{data.importedNote}</Text></SectionMessage> : null}
       <ModeBanner mode={data.mode} windowNote={data.windowNote} />
       <Tabs id="lessel-tabs">
         <TabList><Tab>Agents × shapes</Tab><Tab>Clean Room</Tab><Tab>History</Tab></TabList>
