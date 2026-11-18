@@ -105,6 +105,7 @@ const handlers = {
   "recompute-pair": body => recompute(body.agentId, body.shapeId, undefined, { force: true }),
   "recompute-team": body => recomputeTeam(body.shapeId),
   "scan-history": body => scanHistory(body.pageId),
+  "privacy-report": () => require("./services/privacy").reportPersonalData(),
 };
 
 /** Consumer resolver for the lessel-jobs queue. */

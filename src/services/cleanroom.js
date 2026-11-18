@@ -9,6 +9,7 @@ const { checkDeclaration, inTaintedRange, rangeText, contextGate } = require("..
 const { UserError, reexcuseForSource } = require("./signals");
 const { notifyItems } = require("./notify");
 const { pageIdFromUrl } = require("../adapters/confluence");
+const { adfText } = require("../adapters/jira");
 
 /** Stable source id from a URL. Confluence pages are versioned; Jira items are scanned but versionless. */
 function sourceRef(url) {
@@ -81,6 +82,24 @@ async function scanJiraText(issueKey, text, cfg) {
     await repo.patchSource(source_id, { state: "suspect", rationale: [...new Set(findings.map(f => f.filter))].join(", ") });
   }
   return { source_id, findings };
+}
+
+/**
+ * Re-scan a ticket's description and every comment at the moment an agent is about to use it. Jira has no
+ * event for an edited comment, so a comment that was clean when posted could carry instructions now.
+ * Best-effort: returns the ticket's source row, or null if nothing was ever flagged or Jira can't be read.
+ */
+async function rescanTicket(issueKey, cfg) {
+  cfg = cfg ?? await repo.getSettings();
+  if (!cfg.cleanRoom.jiraProjects.includes(String(issueKey).split("-")[0])) return null;
+  try {
+    const issue = await ports.jira.getIssue(issueKey, ["description"]);
+    const texts = [adfText(issue?.fields?.description), ...(await ports.jira.listComments(issueKey)).map(c => c.text)];
+    for (const text of texts) if (text) await scanJiraText(issueKey, text, cfg);
+  } catch (e) {
+    console.warn(`rescanTicket ${issueKey}`, e?.message);
+  }
+  return repo.getSource(`jira:issue:${issueKey}`);
 }
 
 async function blastRadius(sourceId) {
@@ -252,5 +271,5 @@ async function checkContext(level, sourceUrl) {
   return { ...contextGate(src, level, version), sourceState: src.state, version };
 }
 
-module.exports = { sourceRef, scanConfluencePage, scanHistory, scanJiraText, blastRadius, confirmTaint, markFixed,
+module.exports = { sourceRef, scanConfluencePage, scanHistory, scanJiraText, rescanTicket, blastRadius, confirmTaint, markFixed,
   restoreClean, quarantine, dismissTaint, declareContext, checkContext };

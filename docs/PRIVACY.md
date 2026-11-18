@@ -41,7 +41,7 @@ sends `store: false`-compatible requests and no account identifiers.
 
 Nothing on its own:
 - **Change-class fallback.** It only runs when the path map can't classify a change, and never in the merge
-  check. An LLM-classified shape never allows self-merge until a person confirms the shape.
+  check. An LLM-classified shape caps the agent at L1 (no self-merge) until a person confirms the shape.
 - **Clean Room LLM stage.** It's advisory. A quote counts only if it appears verbatim in the page, and only a
   person can confirm a taint.
 
@@ -50,6 +50,9 @@ Nothing on its own:
 - Data lives in the installation's Forge SQL database for as long as the app is installed. Uninstalling the
   app removes it per Forge's storage lifecycle.
 - History snapshots for judges replace person account ids with `staff` and exclude the staff audit log.
-- Account ids appear only in `signals.decided_by`, `sources.confirmed_by` and `staff_actions`. **[verify]**
-  whether Forge apps storing account ids must implement the personal data reporting API, and if so, add the
-  report/erase handler for those three columns.
+- Account ids appear only in `signals.decided_by`, `sources.confirmed_by`, `staff_actions.actor` and the agents'
+  Jira/MCP logins. Lessel stores no names, emails or avatars.
+- **Personal data reporting.** Once a week Lessel reports those account ids through Forge's personal data
+  reporting API (`privacy.reportPersonalData`). For an account Atlassian reports as closed, it replaces the id
+  with `closed-account` in all three columns and removes it as an agent login. It logs only the number of
+  accounts erased, never the ids. There is no profile data to refresh for accounts reported as updated.

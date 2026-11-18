@@ -65,6 +65,23 @@ async function addComment(keyOrId, text) {
   return readJson(res, "comment");
 }
 
+/** All comments on an issue (plain text), oldest first; capped at `max`. */
+async function listComments(keyOrId, max = 500) {
+  const { route } = api();
+  const out = [];
+  let startAt = 0;
+  while (out.length < max) {
+    const res = await api().asApp().requestJira(route`/rest/api/3/issue/${keyOrId}/comment?startAt=${startAt}&maxResults=100&orderBy=created`,
+      { headers: { Accept: "application/json" } });
+    const body = await readJson(res, "comments");
+    const page = body?.comments ?? [];
+    for (const c of page) out.push({ id: c.id, text: adfText(c.body), updated: c.updated });
+    startAt += page.length;
+    if (!page.length || startAt >= (body?.total ?? 0)) break;
+  }
+  return out.slice(0, max);
+}
+
 /** Permission check as the calling user (UI resolvers). */
 async function userHas(permission, { issueKey, projectKey } = {}) {
   const { route } = api();
@@ -85,4 +102,4 @@ function adfText(node) {
   return (node.content || []).map(adfText).join(node.type === "paragraph" ? "\n" : "");
 }
 
-module.exports = { getIssue, getStatus, listLinkTypes, getProject, listFields, getIssueLink, searchJql, addComment, userHas, adfText };
+module.exports = { listComments, getIssue, getStatus, listLinkTypes, getProject, listFields, getIssueLink, searchJql, addComment, userHas, adfText };

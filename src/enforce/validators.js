@@ -47,6 +47,8 @@ async function validateAgentStart(args) {
     if (!agentId) return { result: true };
     const agent = await repo.getAgent(agentId);
     if (!agent) return { result: true };
+    // Starting work is when the agent reads the ticket: re-scan it (Jira sends no event for edited comments).
+    await require("../services/cleanroom").rescanTicket(key, cfg);
     const shape = shapeObj(item.shape_id, item.classified_by, cfg);
     const d = await decide({ agent, shape, issueKey: key }, cfg);
     if (!d.blocked || cfg.enforcementMode !== "enforcing") return { result: true };

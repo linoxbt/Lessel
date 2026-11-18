@@ -16,6 +16,12 @@ async function resolveOutcomes() {
   return { statusCode: 204 };
 }
 
+/** Weekly: report stored accountIds to Atlassian and erase closed accounts (Forge personal data reporting). */
+async function reportPersonalData() {
+  await jobs.enqueue({ type: "privacy-report" }, "privacy-report");
+  return { statusCode: 204 };
+}
+
 /** App installed or upgraded: run migrations. */
 async function onLifecycle() {
   await jobs.enqueue({ type: "migrate" }, "migrate");
@@ -27,6 +33,7 @@ module.exports = {
   onConfluenceEvent,
   onLifecycle,
   resolveOutcomes,
+  reportPersonalData,
   jobs: jobs.jobsResolver(),
   mergeGate,
   validateReadyToMerge,

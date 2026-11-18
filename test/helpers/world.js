@@ -43,6 +43,7 @@ function makeWorld() {
   const comments = [];              // { prId, raw }
   const jiraComments = [];          // { key, text }
   const confluenceCalls = [];       // quarantine calls, in order
+  const issueComments = new Map();  // key → [{ id, text }]
   const issues = new Map();         // key → issue
   const links = new Map();          // id → link
   const pages = new Map();          // pageId → [{ number, createdAt, title, body, spaceId }]
@@ -72,6 +73,7 @@ function makeWorld() {
     async searchJql() { return []; },
     async userHas() { return true; },
     async addComment(key, text) { jiraComments.push({ key, text }); return {}; },
+    async listComments(key) { return issueComments.get(key) ?? []; },
     async getProject(key) { return ["PAY", "INC"].includes(key) ? { key } : null; },
     async listLinkTypes() { return [{ name: "Problem/Incident", inward: "is caused by", outward: "causes" }, { name: "Relates" }]; },
     async listFields() { return [{ id: "priority" }, { id: "customfield_10050", name: "Severity" }]; },
@@ -115,7 +117,7 @@ function makeWorld() {
 
   const strip = u => String(u).replace(/[{}]/g, "").toLowerCase();
   const w = {
-    clock, prs, comments, jiraComments, confluenceCalls, issues, links, pages, statuses, mainLine, commitsByHead,
+    clock, prs, comments, jiraComments, confluenceCalls, issueComments, issues, links, pages, statuses, mainLine, commitsByHead,
     advance(hours) { clock.t += hours * HOUR; },
     issue(key, fields = {}) {
       const i = { id: String(++seq + 10000), key, fields: { summary: `Work on ${key}`, project: { key: key.split("-")[0] },

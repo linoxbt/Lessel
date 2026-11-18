@@ -34,6 +34,7 @@ modules:
         - avi:confluence:created:page
         - avi:confluence:updated:page
         - avi:confluence:created:comment
+        - avi:confluence:updated:comment
 
     - key: lifecycle
       function: onLifecycle
@@ -45,6 +46,9 @@ modules:
     - key: outcome-resolver
       function: resolveOutcomes
       interval: hour
+    - key: personal-data-report
+      function: reportPersonalData
+      interval: week
 
   consumer:
     - key: lessel-jobs
@@ -231,6 +235,8 @@ modules:
       handler: index.onConfluenceEvent
     - key: resolveOutcomes
       handler: index.resolveOutcomes
+    - key: reportPersonalData
+      handler: index.reportPersonalData
     - key: onLifecycle
       handler: index.onLifecycle
     - key: jobs

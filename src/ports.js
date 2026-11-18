@@ -7,6 +7,7 @@ const ports = {
   get confluence() { return this._confluence ?? (this._confluence = require("./adapters/confluence")); },
   get graph() { return this._graph ?? (this._graph = require("./adapters/graph")); },
   get llm() { return this._llm ?? (this._llm = require("./adapters/llm")); },
+  get privacy() { return this._privacy ?? (this._privacy = { reportPersonalData: a => require("@forge/api").privacy.reportPersonalData(a) }); },
   now: () => new Date(),
 };
 
@@ -17,7 +18,7 @@ function setPorts(overrides) {
   }
 }
 function resetPorts() {
-  for (const k of ["_bitbucket", "_jira", "_confluence", "_llm", "_graph"]) delete ports[k];
+  for (const k of ["_bitbucket", "_jira", "_confluence", "_llm", "_graph", "_privacy"]) delete ports[k];
   ports.now = () => new Date();
 }
 

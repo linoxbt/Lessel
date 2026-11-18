@@ -41,6 +41,9 @@ against the code before it was fixed, and each fix has a regression test.
 | Declared reads | Any `readAt` was accepted | A `readAt` before the assignment is flagged `read-before-assignment` and can't excuse |
 | Record sweeps | Skipped pairs whose watermark hadn't moved | The hourly sweep recomputes every pair (including pairs that only have a record) and writes regardless of the watermark |
 | Panel and sources | Any user; sources for any user | The panel needs browse permission on the item; the Clean Room sources view (it shows quotes from possibly restricted pages) is admin-only |
+| Edited comments | Only new comments were scanned | Confluence: edited comments are scanned again (`avi:confluence:updated:comment`). Jira has no edited-comment event, so the ticket's description and every comment are re-scanned when an agent starts work or calls check-ticket-fit, and check-ticket-fit warns if they contain text aimed at agents |
+| Page events without a version | Deduped on a fixed key, so later edits were skipped | Keyed on the page's current version |
+| Duplicate events at the same moment | — (reported as a possible race) | Not a bug: every side effect is claimed with `INSERT IGNORE` before it happens, so two copies post one PR comment. A test runs the same event twice at once |
 | Runner | — | Credentials never on the command line or in error text; agent file access confined to the repo with symlinks and `.git` blocked; `npm ci --ignore-scripts` as a separate user; PRs blocked without declared context; tasks scoped to their agent; FIT verification required except on localhost |
 
 ## 2. `[verify]` items resolved during the build
@@ -71,7 +74,7 @@ against the code before it was fixed, and each fix has a regression test.
 - **Forge invocation tokens:** the JWKS URL used to verify them (the runner allows overriding it with `FORGE_JWKS_URL`).
 - **Site-specific settings:** the work-item ARI format for graph parameters; your caused-by link type name; your
   JSM severity field.
-- **Policy:** whether storing confirmer accountIds requires the personal-data reporting API.
+- **Personal data reporting:** the weekly report runs against the real API (built; tested only with a fake).
 
 The Setup check on the settings page tests the site-specific ones (link type, projects, severity field) live.
 
@@ -82,6 +85,8 @@ The Setup check on the settings page tests the site-specific ones (link type, pr
 - **Judge snapshot export/import:** person ids become `staff`; the import is labelled "Imported history" and
   starts in advisory mode.
 - **Setup check:** configuration plus live Jira checks.
+- **Personal data reporting:** a weekly trigger reports stored account ids; closed accounts become
+  `closed-account` everywhere and lose their agent login.
 - **Demo rig:** the ledger-service repo with a staging pipeline and a synthetic check that opens incidents; the
   A2A runner; the Demo Agents app.
 - **CI on GitHub Actions:** all suites, with the end-to-end tests against MariaDB; manifests; Forge linters.
@@ -91,5 +96,4 @@ The Setup check on the settings page tests the site-specific ones (link type, pr
 
 None of these are on the build plan's critical path:
 - the hierarchical model;
-- GitHub and GitLab support;
-- the per-person data reporting handler, pending the policy check above.
+- GitHub and GitLab support.

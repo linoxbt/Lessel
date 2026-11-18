@@ -37,6 +37,8 @@ deployed yet: deploying needs your Atlassian login.
 | Judge snapshot export/import (no person ids; "Imported history" banner) | Built, round-trip tested |
 | P4: Clean Room LLM stage (Qwen via Fortytwo, or Forge LLMs), quote-grounded and advisory | Built, tested with a fake Qwen |
 | P4: page quarantine (label, footer comment, optional read restriction; lifted on fix/restore), reminders before a suspected cause expires, reassignment hint in the panel | Built, tested |
+| Personal data reporting: weekly report of stored account ids; closed accounts erased everywhere | Built, tested with a fake reporting API |
+| Security review fixes: assignment-checked merge gate, AI-shape cap, frozen attribution, main-only reverts, re-scan of edited comments | Built, tested |
 | Setup check on the settings page (config + live Jira checks) | Built, tested |
 | CI (GitHub Actions: tests with MariaDB, runner, ledger-service, manifests, bundles, Forge linters) | Added |
 

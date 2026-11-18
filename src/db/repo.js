@@ -23,6 +23,32 @@ async function setSetting(key, value) {
     ON DUPLICATE KEY UPDATE value_json = VALUES(value_json), updated_at = ${NOW}`, [key, JSON.stringify(value)]);
 }
 
+// ---------- personal data (Forge personal data reporting) ----------
+/** Every Atlassian accountId Lessel stores, with when it was last stored. System actors are excluded. */
+async function storedAccounts() {
+  const rows = await query(`
+    SELECT decided_by AS id, MAX(COALESCE(decided_at, updated_at)) AS at FROM signals WHERE decided_by IS NOT NULL GROUP BY decided_by
+    UNION ALL SELECT actor, MAX(at) FROM staff_actions GROUP BY actor
+    UNION ALL SELECT confirmed_by, MAX(confirmed_at) FROM sources WHERE confirmed_by IS NOT NULL GROUP BY confirmed_by
+    UNION ALL SELECT account_id, MAX(added_at) FROM agent_accounts WHERE product IN ('jira', 'mcp') GROUP BY account_id`, []);
+  const latest = new Map();
+  for (const r of rows) {
+    const id = String(r.id ?? "");
+    if (!id || /^(lessel|link):/.test(id) || id === ERASED || id === "staff") continue;
+    const at = toDate(r.at) ?? new Date(0);
+    if (!latest.has(id) || latest.get(id) < at) latest.set(id, at);
+  }
+  return [...latest].map(([accountId, at]) => ({ accountId, updatedAt: at.toISOString() }));
+}
+const ERASED = "closed-account";
+/** A closed Atlassian account: replace its id everywhere, and drop it as an agent login. */
+async function eraseAccount(accountId) {
+  await exec("UPDATE signals SET decided_by = ? WHERE decided_by = ?", [ERASED, accountId]);
+  await exec("UPDATE staff_actions SET actor = ? WHERE actor = ?", [ERASED, accountId]);
+  await exec("UPDATE sources SET confirmed_by = ? WHERE confirmed_by = ?", [ERASED, accountId]);
+  await exec("DELETE FROM agent_accounts WHERE account_id = ? AND product IN ('jira', 'mcp')", [accountId]);
+}
+
 // ---------- events ----------
 const seen = async key => !!(await one("SELECT 1 AS x FROM events_seen WHERE event_key = ?", [key]));
 const markSeen = key => exec("INSERT IGNORE INTO events_seen (event_key) VALUES (?)", [key]);
@@ -278,7 +304,7 @@ const readsForItem = async key => (await query(`${READ_JOIN} WHERE r.issue_key =
 const readsForSource = async id => (await query(`${READ_JOIN} WHERE r.source_id = ? ORDER BY r.recorded_at`, [id])).map(joinRead);
 
 module.exports = {
-  normAccount, getSettings, setSetting, seen, markSeen,
+  normAccount, getSettings, setSetting, seen, markSeen, storedAccounts, eraseAccount, ERASED,
   listAgents, getAgent, upsertAgent, setSuspended, addAccount, removeAccount, accounts, agentForAccount, agentBitbucketAccounts,
   upsertShape, getShape, listShapes,
   getItem, createItem, patchItem, itemsForAgentShape, teamItemsForShape, itemsPastWindow, mergedUndeployed, agentShapePairs, itemsForAgent,
