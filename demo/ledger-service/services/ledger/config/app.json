@@ -1,0 +1,1 @@
+{ "service": "ledger", "port": 8080, "defaultCurrency": "USD" }

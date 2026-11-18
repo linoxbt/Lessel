@@ -1,0 +1,20 @@
+openapi: 3.0.3
+info: { title: Ledger, version: 1.0.0 }
+paths:
+  /health: { get: { responses: { "200": { description: ok } } } }
+  /accounts:
+    post:
+      requestBody: { content: { application/json: { schema: { $ref: "#/components/schemas/Account" } } } }
+      responses: { "201": { description: created }, "400": { description: invalid } }
+  /transfers:
+    post:
+      requestBody: { content: { application/json: { schema: { $ref: "#/components/schemas/Transfer" } } } }
+      responses: { "201": { description: posted }, "400": { description: invalid }, "429": { description: rate limited } }
+  /accounts/{id}/balance:
+    get:
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: balance } }
+components:
+  schemas:
+    Account: { type: object, required: [id, owner, currency], properties: { id: { type: string }, owner: { type: string }, currency: { type: string, enum: [USD, EUR, NGN] } } }
+    Transfer: { type: object, required: [id, from, to, amount, currency], properties: { id: { type: string }, from: { type: string }, to: { type: string }, amount: { type: integer, minimum: 1 }, currency: { type: string } } }

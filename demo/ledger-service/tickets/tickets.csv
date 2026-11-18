@@ -1,0 +1,271 @@
+Summary,Description,Issue Type,Component,Labels,Agent
+"Add index on entries(account_id)","Balance queries scan entries. Add a migration creating an index on entries(account_id). Keep it additive.
+
+Service: ledger. Expected change class: schema-migration.","Task","ledger","lessel-schema-migration","Brook"
+"Add created_by column to transactions","Add a nullable created_by TEXT column to transactions via a new migration. Don't backfill.
+
+Service: ledger. Expected change class: schema-migration.","Task","ledger","lessel-schema-migration","Brook"
+"Add check constraint on entries.currency","Add a CHECK constraint so entries.currency is one of USD, EUR, NGN. New migration only.
+
+Service: ledger. Expected change class: schema-migration.","Task","ledger","lessel-schema-migration","Brook"
+"Add idempotency_keys table","Create an idempotency_keys(key TEXT PRIMARY KEY, transaction_id TEXT, created_at TIMESTAMPTZ) table.
+
+Service: ledger. Expected change class: schema-migration.","Task","ledger","lessel-schema-migration","Brook"
+"Add account status column","Add accounts.status TEXT NOT NULL DEFAULT 'active' with a CHECK (active, frozen, closed).
+
+Service: ledger. Expected change class: schema-migration.","Task","ledger","lessel-schema-migration","Brook"
+"Add composite index for transaction lookups","Add an index on entries(transaction_id, account_id) in a new migration.
+
+Service: ledger. Expected change class: schema-migration.","Task","ledger","lessel-schema-migration","Brook"
+"Add holds table","Create holds(id TEXT PRIMARY KEY, account_id TEXT REFERENCES accounts(id), amount_minor BIGINT, currency CHAR(3), expires_at TIMESTAMPTZ).
+
+Service: ledger. Expected change class: schema-migration.","Task","ledger","lessel-schema-migration","Brook"
+"Add external_ref to transactions","Add a nullable external_ref TEXT column with a unique partial index where it's not null.
+
+Service: ledger. Expected change class: schema-migration.","Task","ledger","lessel-schema-migration","Brook"
+"Add audit_log table","Create audit_log(id BIGSERIAL PRIMARY KEY, actor TEXT, action TEXT, target TEXT, at TIMESTAMPTZ DEFAULT now()).
+
+Service: ledger. Expected change class: schema-migration.","Task","ledger","lessel-schema-migration","Brook"
+"Add currency to accounts index","Add an index on accounts(owner, currency).
+
+Service: ledger. Expected change class: schema-migration.","Task","ledger","lessel-schema-migration","Brook"
+"Add index on entries(account_id) (2)","Balance queries scan entries. Add a migration creating an index on entries(account_id). Keep it additive. Variant 2: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: schema-migration.","Task","ledger","lessel-schema-migration","Brook"
+"Add created_by column to transactions (2)","Add a nullable created_by TEXT column to transactions via a new migration. Don't backfill. Variant 2: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: schema-migration.","Task","ledger","lessel-schema-migration","Brook"
+"Add check constraint on entries.currency (2)","Add a CHECK constraint so entries.currency is one of USD, EUR, NGN. New migration only. Variant 2: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: schema-migration.","Task","ledger","lessel-schema-migration","Brook"
+"Add idempotency_keys table (2)","Create an idempotency_keys(key TEXT PRIMARY KEY, transaction_id TEXT, created_at TIMESTAMPTZ) table. Variant 2: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: schema-migration.","Task","ledger","lessel-schema-migration","Brook"
+"Add account status column (2)","Add accounts.status TEXT NOT NULL DEFAULT 'active' with a CHECK (active, frozen, closed). Variant 2: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: schema-migration.","Task","ledger","lessel-schema-migration","Brook"
+"Add composite index for transaction lookups (2)","Add an index on entries(transaction_id, account_id) in a new migration. Variant 2: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: schema-migration.","Task","ledger","lessel-schema-migration","Brook"
+"Add holds table (2)","Create holds(id TEXT PRIMARY KEY, account_id TEXT REFERENCES accounts(id), amount_minor BIGINT, currency CHAR(3), expires_at TIMESTAMPTZ). Variant 2: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: schema-migration.","Task","ledger","lessel-schema-migration","Brook"
+"Add external_ref to transactions (2)","Add a nullable external_ref TEXT column with a unique partial index where it's not null. Variant 2: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: schema-migration.","Task","ledger","lessel-schema-migration","Brook"
+"Add audit_log table (2)","Create audit_log(id BIGSERIAL PRIMARY KEY, actor TEXT, action TEXT, target TEXT, at TIMESTAMPTZ DEFAULT now()). Variant 2: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: schema-migration.","Task","ledger","lessel-schema-migration","Brook"
+"Add currency to accounts index (2)","Add an index on accounts(owner, currency). Variant 2: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: schema-migration.","Task","ledger","lessel-schema-migration","Atlas"
+"Add index on entries(account_id) (3)","Balance queries scan entries. Add a migration creating an index on entries(account_id). Keep it additive. Variant 3: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: schema-migration.","Task","ledger","lessel-schema-migration","Atlas"
+"Add created_by column to transactions (3)","Add a nullable created_by TEXT column to transactions via a new migration. Don't backfill. Variant 3: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: schema-migration.","Task","ledger","lessel-schema-migration","Atlas"
+"Add check constraint on entries.currency (3)","Add a CHECK constraint so entries.currency is one of USD, EUR, NGN. New migration only. Variant 3: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: schema-migration.","Task","ledger","lessel-schema-migration","Atlas"
+"Add idempotency_keys table (3)","Create an idempotency_keys(key TEXT PRIMARY KEY, transaction_id TEXT, created_at TIMESTAMPTZ) table. Variant 3: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: schema-migration.","Task","ledger","lessel-schema-migration","Atlas"
+"Add account status column (3)","Add accounts.status TEXT NOT NULL DEFAULT 'active' with a CHECK (active, frozen, closed). Variant 3: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: schema-migration.","Task","ledger","lessel-schema-migration","Atlas"
+"Add composite index for transaction lookups (3)","Add an index on entries(transaction_id, account_id) in a new migration. Variant 3: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: schema-migration.","Task","ledger","lessel-schema-migration","Atlas"
+"Add holds table (3)","Create holds(id TEXT PRIMARY KEY, account_id TEXT REFERENCES accounts(id), amount_minor BIGINT, currency CHAR(3), expires_at TIMESTAMPTZ). Variant 3: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: schema-migration.","Task","ledger","lessel-schema-migration","Atlas"
+"Add external_ref to transactions (3)","Add a nullable external_ref TEXT column with a unique partial index where it's not null. Variant 3: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: schema-migration.","Task","ledger","lessel-schema-migration","Atlas"
+"Add audit_log table (3)","Create audit_log(id BIGSERIAL PRIMARY KEY, actor TEXT, action TEXT, target TEXT, at TIMESTAMPTZ DEFAULT now()). Variant 3: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: schema-migration.","Task","ledger","lessel-schema-migration","Atlas"
+"Add currency to accounts index (3)","Add an index on accounts(owner, currency). Variant 3: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: schema-migration.","Task","ledger","lessel-schema-migration","Atlas"
+"Bump pg to the latest 8.x","Update pg in services/ledger to the latest 8.x release and refresh the lockfile. No code changes.
+
+Service: ledger. Expected change class: dependency-bump.","Task","ledger","lessel-dependency-bump","Atlas"
+"Refresh lockfile","Run npm install in services/ledger to refresh package-lock.json against current semver ranges.
+
+Service: ledger. Expected change class: dependency-bump.","Task","ledger","lessel-dependency-bump","Atlas"
+"Pin Node engine to 22.18+","Set engines.node to >=22.18 in services/ledger/package.json and refresh the lockfile.
+
+Service: ledger. Expected change class: dependency-bump.","Task","ledger","lessel-dependency-bump","Atlas"
+"Add npm audit fix for transitive deps","Apply non-breaking audit fixes in services/ledger (package.json + lockfile only).
+
+Service: ledger. Expected change class: dependency-bump.","Task","ledger","lessel-dependency-bump","Atlas"
+"Bump pg to the latest 8.x (2)","Update pg in services/ledger to the latest 8.x release and refresh the lockfile. No code changes. Variant 2: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: dependency-bump.","Task","ledger","lessel-dependency-bump","Atlas"
+"Refresh lockfile (2)","Run npm install in services/ledger to refresh package-lock.json against current semver ranges. Variant 2: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: dependency-bump.","Task","ledger","lessel-dependency-bump","Atlas"
+"Pin Node engine to 22.18+ (2)","Set engines.node to >=22.18 in services/ledger/package.json and refresh the lockfile. Variant 2: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: dependency-bump.","Task","ledger","lessel-dependency-bump","Atlas"
+"Add npm audit fix for transitive deps (2)","Apply non-breaking audit fixes in services/ledger (package.json + lockfile only). Variant 2: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: dependency-bump.","Task","ledger","lessel-dependency-bump","Atlas"
+"Bump pg to the latest 8.x (3)","Update pg in services/ledger to the latest 8.x release and refresh the lockfile. No code changes. Variant 3: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: dependency-bump.","Task","ledger","lessel-dependency-bump","Atlas"
+"Refresh lockfile (3)","Run npm install in services/ledger to refresh package-lock.json against current semver ranges. Variant 3: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: dependency-bump.","Task","ledger","lessel-dependency-bump","Atlas"
+"Pin Node engine to 22.18+ (3)","Set engines.node to >=22.18 in services/ledger/package.json and refresh the lockfile. Variant 3: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: dependency-bump.","Task","ledger","lessel-dependency-bump","Atlas"
+"Add npm audit fix for transitive deps (3)","Apply non-breaking audit fixes in services/ledger (package.json + lockfile only). Variant 3: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: dependency-bump.","Task","ledger","lessel-dependency-bump","Atlas"
+"Bump pg to the latest 8.x (4)","Update pg in services/ledger to the latest 8.x release and refresh the lockfile. No code changes. Variant 4: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: dependency-bump.","Task","ledger","lessel-dependency-bump","Brook"
+"Refresh lockfile (4)","Run npm install in services/ledger to refresh package-lock.json against current semver ranges. Variant 4: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: dependency-bump.","Task","ledger","lessel-dependency-bump","Brook"
+"Pin Node engine to 22.18+ (4)","Set engines.node to >=22.18 in services/ledger/package.json and refresh the lockfile. Variant 4: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: dependency-bump.","Task","ledger","lessel-dependency-bump","Brook"
+"Add npm audit fix for transitive deps (4)","Apply non-breaking audit fixes in services/ledger (package.json + lockfile only). Variant 4: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: dependency-bump.","Task","ledger","lessel-dependency-bump","Brook"
+"Bump pg to the latest 8.x (5)","Update pg in services/ledger to the latest 8.x release and refresh the lockfile. No code changes. Variant 5: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: dependency-bump.","Task","ledger","lessel-dependency-bump","Brook"
+"Refresh lockfile (5)","Run npm install in services/ledger to refresh package-lock.json against current semver ranges. Variant 5: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: dependency-bump.","Task","ledger","lessel-dependency-bump","Brook"
+"Reject transfers between different currencies","POST /transfers must reject a transfer when the two accounts hold different currencies. Domain logic in src/domain.
+
+Service: ledger. Expected change class: business-logic.","Task","ledger","lessel-business-logic","Brook"
+"Lower USD fee floor to 25 cents","Change the USD minimum fee from 30 to 25 minor units in src/domain/fees.ts, with tests.
+
+Service: ledger. Expected change class: business-logic.","Task","ledger","lessel-business-logic","Brook"
+"Add NGN fee cap of 1,500 NGN","Cap NGN transfer fees at 150000 minor units. Update src/domain/fees.ts and tests.
+
+Service: ledger. Expected change class: business-logic.","Task","ledger","lessel-business-logic","Brook"
+"Add memo length limit","Transfers with a memo longer than 140 characters must be rejected in the domain layer.
+
+Service: ledger. Expected change class: business-logic.","Task","ledger","lessel-business-logic","Brook"
+"Support EUR fee waiver for internal accounts","Transfers between accounts whose ids start with 'int_' pay no fee in EUR.
+
+Service: ledger. Expected change class: business-logic.","Task","ledger","lessel-business-logic","Brook"
+"Add reversal transaction helper","Add reverse(tx) in src/domain/ledger.ts that produces the exact opposite transaction, with tests.
+
+Service: ledger. Expected change class: business-logic.","Task","ledger","lessel-business-logic","Brook"
+"Round fees half to even for EUR","EUR fees round half to even instead of half away from zero. Domain change with tests.
+
+Service: ledger. Expected change class: business-logic.","Task","ledger","lessel-business-logic","Brook"
+"Add daily transfer limit per account","Add a pure function that checks a per-account daily limit given today's transfers.
+
+Service: ledger. Expected change class: business-logic.","Task","ledger","lessel-business-logic","Brook"
+"Reject transfers between different currencies (2)","POST /transfers must reject a transfer when the two accounts hold different currencies. Domain logic in src/domain. Variant 2: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: business-logic.","Task","ledger","lessel-business-logic","Brook"
+"Lower USD fee floor to 25 cents (2)","Change the USD minimum fee from 30 to 25 minor units in src/domain/fees.ts, with tests. Variant 2: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: business-logic.","Task","ledger","lessel-business-logic","Brook"
+"Add NGN fee cap of 1,500 NGN (2)","Cap NGN transfer fees at 150000 minor units. Update src/domain/fees.ts and tests. Variant 2: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: business-logic.","Task","ledger","lessel-business-logic","Brook"
+"Add memo length limit (2)","Transfers with a memo longer than 140 characters must be rejected in the domain layer. Variant 2: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: business-logic.","Task","ledger","lessel-business-logic","Brook"
+"Support EUR fee waiver for internal accounts (2)","Transfers between accounts whose ids start with 'int_' pay no fee in EUR. Variant 2: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: business-logic.","Task","ledger","lessel-business-logic","Atlas"
+"Add reversal transaction helper (2)","Add reverse(tx) in src/domain/ledger.ts that produces the exact opposite transaction, with tests. Variant 2: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: business-logic.","Task","ledger","lessel-business-logic","Atlas"
+"Round fees half to even for EUR (2)","EUR fees round half to even instead of half away from zero. Domain change with tests. Variant 2: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: business-logic.","Task","ledger","lessel-business-logic","Atlas"
+"Add daily transfer limit per account (2)","Add a pure function that checks a per-account daily limit given today's transfers. Variant 2: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: business-logic.","Task","ledger","lessel-business-logic","Atlas"
+"Reject transfers between different currencies (3)","POST /transfers must reject a transfer when the two accounts hold different currencies. Domain logic in src/domain. Variant 3: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: business-logic.","Task","ledger","lessel-business-logic","Atlas"
+"Lower USD fee floor to 25 cents (3)","Change the USD minimum fee from 30 to 25 minor units in src/domain/fees.ts, with tests. Variant 3: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: business-logic.","Task","ledger","lessel-business-logic","Atlas"
+"Raise ledger rate limit for batch jobs","Raise the ledger rate limit in services/ledger/config/limits.json for nightly batch jobs. Follow the rate-limit section of the Ledger runbook: https://YOUR-SITE.atlassian.net/wiki/spaces/ENG/pages/RUNBOOK_ID/Ledger+runbook
+
+Service: ledger. Expected change class: config-infra.","Task","ledger","lessel-config-infra","Atlas"
+"Tune burst size","Adjust burst in services/ledger/config/limits.json per the Ledger runbook guidance: https://YOUR-SITE.atlassian.net/wiki/spaces/ENG/pages/RUNBOOK_ID/Ledger+runbook
+
+Service: ledger. Expected change class: config-infra.","Task","ledger","lessel-config-infra","Atlas"
+"Add default currency to app config","Add defaultCurrency to services/ledger/config/app.json if missing and document it.
+
+Service: ledger. Expected change class: config-infra.","Task","ledger","lessel-config-infra","Atlas"
+"Lower rate limit for staging","Staging needs a lower rate limit. Change services/ledger/config/limits.json following the Ledger runbook: https://YOUR-SITE.atlassian.net/wiki/spaces/ENG/pages/RUNBOOK_ID/Ledger+runbook
+
+Service: ledger. Expected change class: config-infra.","Task","ledger","lessel-config-infra","Atlas"
+"Raise ledger rate limit for batch jobs (2)","Raise the ledger rate limit in services/ledger/config/limits.json for nightly batch jobs. Follow the rate-limit section of the Ledger runbook: https://YOUR-SITE.atlassian.net/wiki/spaces/ENG/pages/RUNBOOK_ID/Ledger+runbook Variant 2: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: config-infra.","Task","ledger","lessel-config-infra","Brook"
+"Tune burst size (2)","Adjust burst in services/ledger/config/limits.json per the Ledger runbook guidance: https://YOUR-SITE.atlassian.net/wiki/spaces/ENG/pages/RUNBOOK_ID/Ledger+runbook Variant 2: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: config-infra.","Task","ledger","lessel-config-infra","Brook"
+"Add default currency to app config (2)","Add defaultCurrency to services/ledger/config/app.json if missing and document it. Variant 2: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: config-infra.","Task","ledger","lessel-config-infra","Brook"
+"Lower rate limit for staging (2)","Staging needs a lower rate limit. Change services/ledger/config/limits.json following the Ledger runbook: https://YOUR-SITE.atlassian.net/wiki/spaces/ENG/pages/RUNBOOK_ID/Ledger+runbook Variant 2: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: config-infra.","Task","ledger","lessel-config-infra","Brook"
+"Cover fee rounding edge cases","Add tests for fee rounding at exact half values in services/ledger/src/domain/*.test.ts.
+
+Service: ledger. Expected change class: test-fix.","Task","ledger","lessel-test-fix","Atlas"
+"Cover schema errors for accounts","Add tests for invalid account ids and owners in services/ledger/src/routes/schema.test.ts.
+
+Service: ledger. Expected change class: test-fix.","Task","ledger","lessel-test-fix","Atlas"
+"Cover rate limiter refill","Add a test that the bucket refills over time at max_rps.
+
+Service: ledger. Expected change class: test-fix.","Task","ledger","lessel-test-fix","Atlas"
+"Cover multi-currency balances","Add a balances() test with USD and EUR transactions mixed.
+
+Service: ledger. Expected change class: test-fix.","Task","ledger","lessel-test-fix","Atlas"
+"Cover fee rounding edge cases (2)","Add tests for fee rounding at exact half values in services/ledger/src/domain/*.test.ts. Variant 2: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: test-fix.","Task","ledger","lessel-test-fix","Brook"
+"Cover schema errors for accounts (2)","Add tests for invalid account ids and owners in services/ledger/src/routes/schema.test.ts. Variant 2: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: test-fix.","Task","ledger","lessel-test-fix","Brook"
+"Cover rate limiter refill (2)","Add a test that the bucket refills over time at max_rps. Variant 2: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: test-fix.","Task","ledger","lessel-test-fix","Brook"
+"Cover multi-currency balances (2)","Add a balances() test with USD and EUR transactions mixed. Variant 2: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: ledger. Expected change class: test-fix.","Task","ledger","lessel-test-fix","Brook"
+"Cap coupons at 40%","services/checkout: reject coupons above 40%. Domain change with tests.
+
+Service: checkout. Expected change class: business-logic.","Task","checkout","lessel-business-logic","Atlas"
+"Round tax half to even","services/checkout: tax rounds half to even. Domain change with tests.
+
+Service: checkout. Expected change class: business-logic.","Task","checkout","lessel-business-logic","Atlas"
+"Reject more than 100 items","services/checkout: reject carts with more than 100 total items.
+
+Service: checkout. Expected change class: business-logic.","Task","checkout","lessel-business-logic","Atlas"
+"Free shipping threshold","services/checkout: add a free-shipping flag when subtotal is over 5000 minor units.
+
+Service: checkout. Expected change class: business-logic.","Task","checkout","lessel-business-logic","Atlas"
+"Cap coupons at 40% (2)","services/checkout: reject coupons above 40%. Domain change with tests. Variant 2: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: checkout. Expected change class: business-logic.","Task","checkout","lessel-business-logic","Brook"
+"Round tax half to even (2)","services/checkout: tax rounds half to even. Domain change with tests. Variant 2: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: checkout. Expected change class: business-logic.","Task","checkout","lessel-business-logic","Brook"
+"Reject more than 100 items (2)","services/checkout: reject carts with more than 100 total items. Variant 2: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: checkout. Expected change class: business-logic.","Task","checkout","lessel-business-logic","Brook"
+"Free shipping threshold (2)","services/checkout: add a free-shipping flag when subtotal is over 5000 minor units. Variant 2: pick a different column, limit or test case than earlier tickets with this title.
+
+Service: checkout. Expected change class: business-logic.","Task","checkout","lessel-business-logic","Brook"

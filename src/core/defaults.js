@@ -34,7 +34,10 @@ const DEFAULTS = Object.freeze({
     { pattern: "services/checkout/**", service: "checkout" },
   ],
   criticalServices: ["checkout"],
-  classPaths: [                                // matched against the path inside the service directory
+  classPaths: [                                // matched against the path inside the service directory;
+                                               // first match wins per file, so test files come first
+    { pattern: "**/*.test.ts", cls: "test-fix" },
+    { pattern: "**/*.test.js", cls: "test-fix" },
     { pattern: "migrations/**", cls: "schema-migration" },
     { pattern: "prisma/schema.prisma", cls: "schema-migration" },
     { pattern: "bitbucket-pipelines.yml", cls: "config-infra" },
@@ -47,7 +50,6 @@ const DEFAULTS = Object.freeze({
     { pattern: "package-lock.json", cls: "dependency-bump" },
     { pattern: "yarn.lock", cls: "dependency-bump" },
     { pattern: "pnpm-lock.yaml", cls: "dependency-bump" },
-    { pattern: "**/*.test.ts", cls: "test-fix" },
     { pattern: "docs/**", cls: "docs-copy" },
     { pattern: "src/ui/strings/**", cls: "docs-copy" },
   ],

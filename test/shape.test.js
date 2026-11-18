@@ -40,6 +40,11 @@ test("class: only-classes need every file to match one of them", () => {
   assert.equal(S.classFromPaths([], rules), null);
 });
 
+test("class: a test-only change inside src/domain is test-fix; code + tests is business-logic", () => {
+  assert.equal(S.classFromPaths([L("src/domain/ledger.test.ts")], rules), "test-fix");
+  assert.equal(S.classFromPaths([L("src/domain/fees.ts"), L("src/domain/fees.test.ts")], rules), "business-logic");
+});
+
 test("riskier picks the earlier class in risk order", () => {
   assert.equal(S.riskier("test-fix", "schema-migration"), "schema-migration");
   assert.equal(S.riskier(null, "docs-copy"), "docs-copy");

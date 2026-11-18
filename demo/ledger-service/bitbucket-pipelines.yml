@@ -1,0 +1,37 @@
+# Lessel demo pipeline: test both services, deploy ledger to staging (recorded as a Bitbucket
+# deployment, which opens Lessel's observation window), then run the synthetic check, which opens a
+# JSM incident when staging is broken.
+image: node:22
+
+definitions:
+  services:
+    postgres:
+      image: postgres:16
+      variables:
+        POSTGRES_PASSWORD: postgres
+        POSTGRES_DB: ledger
+  steps:
+    - step: &test
+        name: Test
+        services: [postgres]
+        script:
+          - cd services/ledger && npm ci && npm test
+          - DATABASE_URL=postgres://postgres:postgres@localhost:5432/ledger npm run migrate
+          - cd ../checkout && npm test
+
+pipelines:
+  pull-requests:
+    "**":
+      - step: *test
+  branches:
+    main:
+      - step: *test
+      - step:
+          name: Deploy to staging
+          deployment: staging
+          script:
+            - bash scripts/deploy-staging.sh
+      - step:
+          name: Synthetic check
+          script:
+            - node scripts/synthetic-check.mjs
