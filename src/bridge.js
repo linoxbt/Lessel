@@ -1,8 +1,10 @@
 "use strict";
-// Lessel's end of the Bitbucket link: a web trigger the Lessel for Bitbucket app calls with
-// { kind: "event", event } for Bitbucket product events and { kind: "merge-check", event } for the merge
-// check; an operator can also send { kind: "run-job", type: "migrate" | "hourly" }. Requests must be signed
-// with LESSEL_BRIDGE_SECRET (see bridge-sign.js); anything else gets 401.
+// Lessel's end of the Bitbucket link: a web trigger, called with
+//   { kind: "event", event }            Bitbucket product events, from Lessel for Bitbucket
+//   { kind: "merge-check", event }      the Bitbucket merge check, from Lessel for Bitbucket
+//   { kind: "confluence-event", event } Confluence events, from Lessel's own Confluence installation
+//   { kind: "run-job", type }           operator hook: "migrate" or "hourly"
+// Requests must be signed with LESSEL_BRIDGE_SECRET (see bridge-sign.js); anything else gets 401.
 
 const { verify } = require("./bridge-sign");
 
@@ -28,6 +30,11 @@ async function bitbucketBridge(req) {
     if (msg.kind === "event") {
       const { onBitbucketEvent } = require("./events/bitbucket");
       await onBitbucketEvent(msg.event ?? {});
+      return reply(200, { ok: true });
+    }
+    if (msg.kind === "confluence-event") {
+      const { onConfluenceEvent } = require("./events/confluence");
+      await onConfluenceEvent(msg.event ?? {});
       return reply(200, { ok: true });
     }
     if (msg.kind === "run-job" && ["migrate", "hourly"].includes(msg.type)) {

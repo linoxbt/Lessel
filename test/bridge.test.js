@@ -113,3 +113,19 @@ test("Bitbucket adapter: token auth, encoded UUIDs, no pagination off-site", asy
   await assert.rejects(bb.listPrs("w", "r"), /Refusing to follow a pagination link/);
   delete process.env.BITBUCKET_EMAIL; delete process.env.BITBUCKET_API_TOKEN;
 });
+
+test("Confluence installation forwards events to the Jira one, signed", async () => {
+  const client = require("../src/bridge-client");
+  process.env.LESSEL_BRIDGE_URL = "https://abc.hello.atlassian-dev.net/x1/t";
+  process.env.LESSEL_BRIDGE_SECRET = SECRET;
+  const sent = [];
+  client.setTransport(async (url, opts) => { sent.push(JSON.parse(opts.body)); assert.ok(verify(opts.body, opts.headers["x-lessel-signature"], SECRET));
+    return { ok: true, status: 200, text: async () => "{\"ok\":true}" }; });
+  const { onConfluenceEvent } = require("../src/index");
+  const ev = { eventType: "avi:confluence:updated:page", content: { id: "1" } };
+  await onConfluenceEvent(ev, { installContext: "ari:cloud:confluence::site/abc" });
+  assert.deepEqual(sent, [{ kind: "confluence-event", event: ev }]);
+  assert.equal(client.inConfluenceInstall({ installContext: "ari:cloud:jira::site/abc" }), false);
+  delete process.env.LESSEL_BRIDGE_URL; delete process.env.LESSEL_BRIDGE_SECRET;
+});
+

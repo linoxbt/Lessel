@@ -2,7 +2,14 @@
 // Forge function entry points (manifest `function` handlers).
 
 const { onJiraEvent } = require("./events/jira");
-const { onConfluenceEvent } = require("./events/confluence");
+const { onConfluenceEvent: handleConfluenceEvent } = require("./events/confluence");
+const { postToBridge, inConfluenceInstall } = require("./bridge-client");
+
+/** Confluence events arrive in Lessel's Confluence installation; its data lives in the Jira one: forward them. */
+async function onConfluenceEvent(event, context) {
+  if (inConfluenceInstall(context)) return postToBridge({ kind: "confluence-event", event });
+  return handleConfluenceEvent(event);
+}
 const { bitbucketBridge } = require("./bridge");
 const { validateReadyToMerge, validateAgentStart } = require("./enforce/validators");
 const actions = require("./mcp/actions");

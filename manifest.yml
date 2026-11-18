@@ -275,6 +275,9 @@ permissions:
         # Bitbucket REST with an API token (PRs, diffstats, statuses, PR notices).
         - address: https://api.bitbucket.org
           inScopeEUD: true
+        # Lessel's own bitbucket-bridge web trigger: the Confluence installation forwards events to the Jira one.
+        - address: "*.hello.atlassian-dev.net"
+          inScopeEUD: true
   scopes:
     - read:jira-work
     - write:jira-work
