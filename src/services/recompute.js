@@ -27,14 +27,14 @@ const EPOCH = new Date("2000-01-01T00:00:00Z");
 const maxTime = dates => dates.filter(Boolean).reduce((m, d) => (d > m ? d : m), EPOCH);
 
 /** Record + holds for one (agent, shape). */
-async function recompute(agentId, shapeId, cfg) {
+async function recompute(agentId, shapeId, cfg, { force = false } = {}) {
   cfg = cfg ?? await repo.getSettings();
   const items = await repo.itemsForAgentShape(agentId, shapeId);
   const signals = await repo.signalsForAgentShape(agentId, shapeId);
   const sigWm = signals.map(s => s.updated_at);
   const watermark = maxTime([...sigWm, ...items.map(i => i.updated_at)]);
   const rec = recordFromOutcomes(items.map(i => i.outcome), cfg.levels);
-  await repo.upsertRecord({ subject_id: agentId, shape_id: shapeId, ...rec, watermark });
+  await repo.upsertRecord({ subject_id: agentId, shape_id: shapeId, ...rec, watermark, force });
   await repo.syncHolds(agentId, shapeId, deriveHolds({ agentId, shapeId, items, signals }, cfg));
   return rec;
 }
@@ -69,7 +69,7 @@ async function recomputeTeam(shapeId, cfg) {
 async function recomputeAll(cfg) {
   cfg = cfg ?? await repo.getSettings();
   const pairs = await repo.agentShapePairs();
-  for (const { agent_id, shape_id } of pairs) await recompute(agent_id, shape_id, cfg);
+  for (const { agent_id, shape_id } of pairs) await recompute(agent_id, shape_id, cfg, { force: true });
   const shapes = await repo.listShapes();
   for (const s of shapes) await recomputeTeam(s.shape_id, cfg);
   return pairs.length;

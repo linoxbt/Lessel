@@ -15,13 +15,23 @@ const SELF_MERGE_LABEL = { yes: "may self-merge", "if-green": "may self-merge on
  * @param {object} p.ctx     { state: clean|warn|blocked, reason }
  * @param {boolean|null} p.buildGreen  null when there's no PR or the build wasn't checked
  */
-function decideCore({ agent, shape, rec, holds = [], ctx = { state: "clean" }, buildGreen = null }, cfg = DEFAULTS) {
+function decideCore({ agent, shape, rec, holds = [], ctx = { state: "clean" }, buildGreen = null, serviceFloor = 1 }, cfg = DEFAULTS) {
   const record = rec ?? emptyRecord();
   const out = { earned: record.earned_level, effective: record.earned_level, rec: record, holds, ctx,
     reasons: [], blocked: false, approvals: null, selfMerge: "no" };
 
   if (agent.suspended) return { ...out, blocked: true, reasons: ["Suspended by an admin."] };
   if (ctx.state === "blocked") return { ...out, blocked: true, reasons: [ctx.reason] };
+
+  // A shape chosen by the AI reads ticket text, which can be written to steer it. Until a person confirms the
+  // shape, the agent gets no more than L1 there, and no more than its lowest level anywhere in that service.
+  if (shape.classified_by === "llm") {
+    const cap = Math.min(1, serviceFloor);
+    if (out.effective > cap) {
+      out.effective = cap;
+      out.reasons.push(`Shape chosen by the AI: limited to L${cap} until a person confirms it.`);
+    }
+  }
 
   const probation = holds.find(h => h.kind === "probation");
   if (probation) {

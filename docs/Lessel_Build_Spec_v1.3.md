@@ -23,6 +23,26 @@ v1.2 for the design, and this page for where the build differs. Section numbers 
 | Teamwork Graph | Graph sweep from triggers if `asApp()` works | **`requestTeamworkGraph` is `asUser()` only** (confirmed in `@forge/api` types). Saved Cypher queries via `customQuery`; incidents found in the graph become *associated* signals when someone opens the issue panel; the dev chain shows in the panel | Raw `cypherQuery` isn't available to new apps, and triggers can't use the graph |
 | Demo hosting | "Your A2A server" | Railway project `lessel-demo`: ledger staging + Postgres, and the runner with a persistent volume. Both deploy from `main` and only rebuild when their own folder changes | Gives the Demo Agents app a stable HTTPS address |
 
+## 1a. Rules tightened after the security review
+
+Two independent reviews (one of Lessel, one of the demo runner) went through the build. Each finding was checked
+against the code before it was fixed, and each fix has a regression test.
+
+| Area | Before | Now |
+|---|---|---|
+| Merge check | Trusted the Jira key in the branch name | The key must name an item assigned to that agent, or the PR is blocked |
+| AI-chosen shapes | Ran at the agent's earned level, with no self-merge | **Capped at L1** (and at the agent's lowest level in that service, so L0 anywhere there blocks) until a person confirms the shape. Ticket text can be written to steer the classifier |
+| Confirming a shape | Any editor could set any shape on any item | Editors can only confirm the AI's choice; choosing a different shape needs a Jira admin and a shape Lessel knows. Frozen items can't change. Every change is logged |
+| Attribution | A later PR on the same key could change who owned the outcome | Once the window opens, later PRs (fix-forwards, revert PRs) are recorded but can't change the author, shape or merge time |
+| Revert detection | Any pushed branch or tag | Only pushes to the repo's main branch (`repos.<uuid>.mainBranch`, default `main`) |
+| Deployment windows | An environment with no type could open a window | Only a deployment we can identify as `windowEnvironment` opens one |
+| MCP identity | Fell back to an accountId in the payload | Taken from the invocation context only |
+| Excusals | Permanent once granted | Withdrawn (back to *confirmed*) when the taint is dismissed or the range no longer covers the version read. Admins can dismiss a taint |
+| Declared reads | Any `readAt` was accepted | A `readAt` before the assignment is flagged `read-before-assignment` and can't excuse |
+| Record sweeps | Skipped pairs whose watermark hadn't moved | The hourly sweep recomputes every pair (including pairs that only have a record) and writes regardless of the watermark |
+| Panel and sources | Any user; sources for any user | The panel needs browse permission on the item; the Clean Room sources view (it shows quotes from possibly restricted pages) is admin-only |
+| Runner | — | Credentials never on the command line or in error text; agent file access confined to the repo with symlinks and `.git` blocked; `npm ci --ignore-scripts` as a separate user; PRs blocked without declared context; tasks scoped to their agent; FIT verification required except on localhost |
+
 ## 2. `[verify]` items resolved during the build
 
 | Item (v1.2 appendix) | Answer | Source |

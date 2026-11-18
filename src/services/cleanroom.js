@@ -193,9 +193,15 @@ async function liftQuarantine(sourceId, cfg) {
   }
 }
 
-async function dismissTaint(sourceId, actor) {
-  await repo.patchSource(sourceId, { state: "clean", rationale: null });
+/** "Not tainted": clears the range, lifts any quarantine and withdraws excusals that relied on it. */
+async function dismissTaint(sourceId, actor, cfg) {
+  cfg = cfg ?? await repo.getSettings();
+  const src = await repo.getSource(sourceId);
+  if (!src) throw new UserError("Unknown source.");
+  if (src.state === "quarantined") await liftQuarantine(sourceId, cfg);
+  await repo.patchSource(sourceId, { state: "clean", rationale: null, tainted_from_version: null, clean_from_version: null });
   await repo.logStaffAction({ actor, action: "taint-dismiss", target: sourceId });
+  await reexcuseForSource(sourceId, cfg);
 }
 
 /** declare-context (spec §13.2). `agent` comes from the caller identity, never from input. */
@@ -219,7 +225,8 @@ async function declareContext(agent, { issueKey, sourceUrl, sourceVersion, readA
     const page = await ports.confluence.getPage(ref.pageId, null).catch(() => null);
     title = page?.title ?? null;
   }
-  const { basis, version, flag } = checkDeclaration({ sourceVersion: declared, readAt: readAtDate, now, versionAtRead });
+  const { basis, version, flag } = checkDeclaration({ sourceVersion: declared, readAt: readAtDate, now, versionAtRead,
+    notBefore: item.assigned_at });
   const src = await repo.upsertSource({ source_id: ref.source_id, url: sourceUrl, title });
   const read_at = readAtDate && readAtDate <= now ? readAtDate : now;
   const read_id = crypto.createHash("sha256")

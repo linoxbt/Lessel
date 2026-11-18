@@ -157,7 +157,10 @@ async function sources() {
 const DEFINITIONS = {
   getBoard: () => board(),
   getEvidence: ({ payload }) => evidence(payload),
-  getPanel: ({ payload, context }) => panel(payload, context),
+  getPanel: async ({ payload, context }) => {
+    if (!(await ports.jira.userHas("BROWSE_PROJECTS", { issueKey: payload.issueKey }))) throw new Forbidden("You can't view this work item.");
+    return panel(payload, context);
+  },
   confirmCause: async ({ payload, context }) => {
     const sig = await repo.getSignal(payload.signalId);
     await requireEdit(sig?.issue_key);
@@ -179,12 +182,22 @@ const DEFINITIONS = {
   confirmShape: async ({ payload, context }) => {
     await requireEdit(payload.issueKey);
     const item = await repo.getItem(payload.issueKey);
-    if (!item) throw new Error("Not tracked.");
-    await repo.patchItem(payload.issueKey, { shape_id: payload.shapeId ?? item.shape_id, classified_by: "manual" });
-    for (const p of await repo.prsForItem(payload.issueKey)) {
-      await repo.upsertPr({ ...p, shape_id: payload.shapeId ?? p.shape_id, classified_by: "manual" });
+    if (!item) throw new signals.UserError("Not tracked.");
+    if (item.shape_state === "frozen") throw new signals.UserError("The shape froze when the window opened; it can't change now.");
+    if (item.classified_by !== "llm") throw new signals.UserError("Only a shape chosen by the AI needs confirming.");
+    const next = payload.shapeId ?? item.shape_id;
+    // Confirming the AI's choice is an editor action; picking a different shape changes which record (and
+    // level) applies, so it needs a Jira admin, and only shapes Lessel already knows are allowed.
+    if (next !== item.shape_id) {
+      await requireAdmin();
+      if (!(await repo.getShape(next))) throw new signals.UserError(`Unknown shape ${next}.`);
     }
-    await repo.logStaffAction({ actor: context.accountId, action: "set-shape", target: payload.issueKey, note: payload.shapeId ?? item.shape_id });
+    await repo.patchItem(payload.issueKey, { shape_id: next, classified_by: "manual" });
+    for (const p of await repo.prsForItem(payload.issueKey)) {
+      if (p.classified_by === "llm") await repo.upsertPr({ ...p, shape_id: next, classified_by: "manual" });
+    }
+    await repo.logStaffAction({ actor: context.accountId, action: "set-shape", target: payload.issueKey,
+      note: next === item.shape_id ? `confirmed ${next}` : `${item.shape_id} -> ${next}` });
     return panel({ issueKey: payload.issueKey }, context);
   },
   getSettings: async () => { await requireAdmin(); return settingsView(); },
@@ -203,7 +216,7 @@ const DEFINITIONS = {
     await repo.logStaffAction({ actor: context.accountId, action: "suspend", target: payload.agentId, note: String(!!payload.suspended) });
     return settingsView();
   },
-  getSources: async () => sources(),
+  getSources: async () => { await requireAdmin(); return sources(); },   // quotes may come from restricted pages
   confirmTaint: async ({ payload, context }) => { await requireAdmin(); await cleanroom.confirmTaint(payload.sourceId, context.accountId, payload.fromVersion); return sources(); },
   markFixed: async ({ payload, context }) => { await requireAdmin(); await cleanroom.markFixed(payload.sourceId, context.accountId, payload.cleanFromVersion); return sources(); },
   quarantine: async ({ payload, context }) => { await requireAdmin(); await cleanroom.quarantine(payload.sourceId, context.accountId); return sources(); },

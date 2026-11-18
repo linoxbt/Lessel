@@ -37,6 +37,11 @@ async function mergeGate(event) {
       `${agent.display_name} opened a PR with no Jira key from ${cfg.projectKeys.join(", ")}. Put the key in the branch name.`);
     const item = await repo.getItem(key);
     if (!item) return verdict(cfg, false, `${key} isn't a work item Lessel is tracking. Check the key.`);
+    // The branch key is the agent's claim; it must match the work it was given, or a blocked task could be
+    // merged under another item's key.
+    if (item.assigned_agent_id !== agent.agent_id && item.agent_id !== agent.agent_id) {
+      return verdict(cfg, false, `${key} isn't assigned to ${agent.display_name}. Use the key of the work item you were assigned.`);
+    }
 
     const prRow = await repo.getPrRow(normUuid(repoUuid), pr.id);
     const shape = await shapeForGate(pr, prRow ?? { workspace_uuid: normUuid(ws), repo_uuid: normUuid(repoUuid) }, item, cfg);

@@ -69,7 +69,9 @@ async function onPullRequest(ws, repoUuid, prId, cfg) {
   const patch = { repo_uuid: normUuid(repoUuid), size_lines: lines };
   if (item.shape_state !== "frozen") Object.assign(patch, riskiestShape(prs, {}), { shape_state: "final" });
 
-  if (state === "merged") {
+  // Once the window has opened (shape frozen), later PRs on the same key — fix-forwards, Bitbucket's own
+  // "Revert …" PRs — are recorded but can't change who the outcome belongs to or its shape.
+  if (state === "merged" && item.shape_state !== "frozen") {
     await repo.addPrCommits(normUuid(repoUuid), pr.id, await ports.bitbucket.prCommits(ws, repoUuid, prId).catch(() => []));
     const merged = prs.filter(p => p.state === "merged");
     Object.assign(patch, attribution(merged));
@@ -82,7 +84,7 @@ async function onPullRequest(ws, repoUuid, prId, cfg) {
     }
   }
   await repo.patchItem(key, patch);
-  if (state === "merged") await afterItemChange(key, { id: `merge:${normUuid(repoUuid)}:${pr.id}`, rev: 0, text: `${key} was merged` }, cfg);
+  if (state === "merged" && item.shape_state !== "frozen") await afterItemChange(key, { id: `merge:${normUuid(repoUuid)}:${pr.id}`, rev: 0, text: `${key} was merged` }, cfg);
   return { key, state, shape };
 }
 
@@ -115,7 +117,8 @@ async function onDeployment(ws, repoUuid, deployment, cfg) {
   const envUuid = deployment?.environment?.uuid;
   let envType = deployment?.environment?.environment_type?.name ?? deployment?.environment?.type;
   if (!envType && envUuid) envType = (await ports.bitbucket.getEnvironment(ws, repoUuid, envUuid).catch(() => null))?.environment_type?.name;
-  if (envType && envType.toLowerCase() !== String(cfg.windowEnvironment).toLowerCase()) return [];
+  // An environment we can't identify never opens a window (a staging deploy mustn't count as production).
+  if (!envType || envType.toLowerCase() !== String(cfg.windowEnvironment).toLowerCase()) return [];
   const commit = deployment?.release?.commit?.hash ?? deployment?.commit?.hash ?? deployment?.deployable?.commit?.hash;
   if (!commit) return [];
   const at = new Date(deployment?.state?.completed_on ?? deployment?.completed_on ?? ports.now());
@@ -169,7 +172,11 @@ async function onBitbucketEvent(event) {
       case "avi:bitbucket:fulfilled:pullrequest":
         return onPullRequest(ws, repoUuid, prId, cfg);
       case "avi:bitbucket:push:repository": {
-        const heads = (event.push?.changes ?? event.changes ?? []).map(c => c.new?.target?.hash).filter(Boolean);
+        // Only reverts that land on the main branch count; a commit message elsewhere proves nothing.
+        const main = repoCfg(cfg, repoUuid).mainBranch ?? "main";
+        const heads = (event.push?.changes ?? event.changes ?? [])
+          .filter(c => c.new?.type !== "tag" && (c.new?.name ?? main) === main)
+          .map(c => c.new?.target?.hash).filter(Boolean);
         return onPush(ws, repoUuid, heads, cfg);
       }
       case "avi:bitbucket:completed:deployment":

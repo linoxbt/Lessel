@@ -60,12 +60,12 @@ test("L0 is blocked", () => {
   assert.match(sentence(brook, shape, d), /L0: suggest only\. This task is blocked\.$/);
 });
 
-test("self-merge withheld at L3 for critical, review, warn and LLM shapes, with reasons", () => {
+test("self-merge withheld at L3 for critical, review, warn and fallback shapes, with reasons", () => {
   const cases = [
     [{ shape: { ...shape, critical: 1 } }, /critical service/],
     [{ holds: [{ kind: "review" }] }, /suspected signal/],
     [{ ctx: { state: "warn", reason: "Context: Runbook is under taint review." } }, /under taint review/],
-    [{ shape: { ...shape, classified_by: "llm" } }, /shape not confirmed/],
+    [{ shape: { ...shape, fallback: true } }, /shape not confirmed/],
   ];
   for (const [extra, re] of cases) {
     const d = decideCore({ agent: brook, shape, rec: rec(16, 17), buildGreen: true, ...extra });
@@ -78,4 +78,16 @@ test("self-merge withheld at L3 for critical, review, warn and LLM shapes, with 
 test("approvals come from settings", () => {
   const cfg = { ...require("../src/core/defaults").DEFAULTS, approvalsByLevel: { 1: 1, 2: 1, 3: 1 } };
   assert.equal(decideCore({ agent: brook, shape, rec: null }, cfg).approvals, 1);
+});
+
+test("AI-chosen shapes are capped at L1 and at the agent's lowest level in that service", () => {
+  const llm = { ...shape, classified_by: "llm" };
+  const d = decideCore({ agent: brook, shape: llm, rec: rec(16, 17), serviceFloor: 3 });
+  assert.equal(d.effective, 1);
+  assert.equal(d.approvals, 2);
+  assert.match(d.reasons.join(" "), /Shape chosen by the AI: limited to L1 until a person confirms it\./);
+  const blocked = decideCore({ agent: brook, shape: llm, rec: rec(16, 17), serviceFloor: 0 });
+  assert.equal(blocked.blocked, true, "an agent at L0 somewhere in the service is blocked on an unconfirmed AI shape");
+  const confirmed = decideCore({ agent: brook, shape: { ...shape, classified_by: "manual" }, rec: rec(16, 17), serviceFloor: 0 });
+  assert.equal(confirmed.effective, 3);
 });

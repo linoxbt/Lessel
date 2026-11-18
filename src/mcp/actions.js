@@ -10,9 +10,12 @@ const { recordFromOutcomes } = require("../core/levels");
 
 class Refusal extends Error {}
 
-/** Caller accountId: Forge passes it in the invocation context [verify which account for MCP calls]. */
+/**
+ * Caller accountId from the invocation context only — never from the payload, which the caller controls.
+ * [verify which account Forge puts in the context for MCP calls]
+ */
 function callerAccountId(payload, context) {
-  return context?.principal?.accountId ?? context?.accountId ?? payload?.context?.accountId ?? payload?.accountId ?? null;
+  return context?.principal?.accountId ?? context?.accountId ?? null;
 }
 
 async function callerAgent(payload, context) {
@@ -81,7 +84,7 @@ const explainRecord = wrap(async (payload) => {
   const byShape = new Map();
   for (const i of items) { if (!byShape.has(i.shape_id)) byShape.set(i.shape_id, []); byShape.get(i.shape_id).push(i); }
   for (const [shapeId, list] of byShape) {
-    const rec = recordFromOutcomes(list.filter(i => i.shape_state === "frozen").map(i => i.outcome));
+    const rec = (await repo.getRecord(agent.agent_id, shapeId)) ?? recordFromOutcomes([]);
     out.push(`${agent.display_name} on ${shapeId}: L${rec.earned_level} (${rec.clean}/${rec.total} confirmed clean, lower bound ${Math.round(rec.lower90 * 100)}%).`);
     for (const i of list.slice(0, 10)) {
       const sigs = await repo.signalsForItem(i.issue_key);

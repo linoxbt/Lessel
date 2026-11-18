@@ -20,10 +20,12 @@ const rangeText = s => s.clean_from_version == null
  * Consistency checks for a declaration (§13.2). Returns the basis, version and flag to store.
  * versionAtRead: the page version current at readAt (or at `now` when no readAt), null if unknown.
  */
-function checkDeclaration({ sourceVersion, readAt, now, versionAtRead }) {
+function checkDeclaration({ sourceVersion, readAt, now, versionAtRead, notBefore = null }) {
   let basis = sourceVersion != null ? "declared" : readAt ? "resolved" : "inferred";
   let flag = null;
   if (readAt && t(readAt) > t(now)) { flag = "read-in-future"; basis = "inferred"; }
+  // A read can't predate the work it supposedly informed (back-dating to claim an old, tainted version).
+  if (readAt && notBefore && t(readAt) < t(notBefore)) { flag = flag ?? "read-before-assignment"; basis = "inferred"; }
   if (versionAtRead == null) { flag = flag ?? "unknown-version"; basis = "inferred"; }
   let version = sourceVersion ?? versionAtRead ?? null;
   if (sourceVersion != null && versionAtRead != null && sourceVersion > versionAtRead) {

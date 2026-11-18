@@ -147,12 +147,22 @@ async function reexcuseForSource(sourceId, cfg) {
   const reads = await repo.readsForSource(sourceId);
   const keys = [...new Set(reads.map(r => r.issue_key))];
   for (const key of keys) {
+    const item = await repo.getItem(key);
     for (const sig of await repo.signalsForItem(key)) {
-      if (sig.causality !== "confirmed") continue;
-      const src = await maybeExcuse(sig.signal_id);
-      if (src) {
-        const fresh = await repo.getSignal(sig.signal_id);
-        await afterItemChange(key, { id: sig.signal_id, rev: fresh.rev, text: `${describe(sig, key)} but excused: bad input from ${src.title || src.url}` }, cfg);
+      if (sig.causality === "confirmed") {
+        const src = await maybeExcuse(sig.signal_id);
+        if (src) {
+          const fresh = await repo.getSignal(sig.signal_id);
+          await afterItemChange(key, { id: sig.signal_id, rev: fresh.rev, text: `${describe(sig, key)} but excused: bad input from ${src.title || src.url}` }, cfg);
+        }
+      } else if (sig.causality === "excused" && item) {
+        // The range narrowed or the taint was dismissed: if no timely tainted read remains, the failure counts again.
+        if (excusingReads(await repo.readsForItem(key), item).length) continue;
+        if (await repo.setCausality(sig.signal_id, "confirmed", { by: "lessel:clean-room", via: `unexcused:${sourceId}`, from: ["excused"] })) {
+          const fresh = await repo.getSignal(sig.signal_id);
+          await afterItemChange(key, { id: sig.signal_id, rev: fresh.rev,
+            text: `${describe(sig, key)}: the excusal was withdrawn because the source is no longer tainted at the version read` }, cfg);
+        }
       }
     }
   }

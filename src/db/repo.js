@@ -101,8 +101,10 @@ const itemsPastWindow = async now =>
 const mergedUndeployed = async repoUuid =>
   (await query(`SELECT * FROM work_items WHERE repo_uuid = ? AND merged_at IS NOT NULL AND deployed_at IS NULL`,
     [repoUuid])).map(itemRow);
+/** Pairs to sweep: every frozen agent item's pair, plus pairs that only have a record left (items moved away). */
 const agentShapePairs = () => query(`SELECT DISTINCT agent_id, shape_id FROM work_items
-  WHERE actor_kind = 'agent' AND agent_id IS NOT NULL AND shape_state = 'frozen'`, []);
+  WHERE actor_kind = 'agent' AND agent_id IS NOT NULL AND shape_state = 'frozen'
+  UNION SELECT subject_id AS agent_id, shape_id FROM records WHERE subject_id <> 'team'`, []);
 const itemsForAgent = async agentId => (await query(
   "SELECT * FROM work_items WHERE agent_id = ? OR assigned_agent_id = ? ORDER BY assigned_at DESC LIMIT 200",
   [agentId, agentId])).map(itemRow);
@@ -171,7 +173,21 @@ async function maxSignalUpdate(agentId, shapeId) {
   return toDate(r?.wm);
 }
 /** Watermark-guarded upsert (§8.4). Assignment order matters: watermark last. */
-async function upsertRecord({ subject_id, shape_id, clean, total, lower90, earned_level, contributors = null, watermark }) {
+/**
+ * Event-driven recomputes are watermark-guarded (a stale snapshot can't overwrite a newer one). Full sweeps
+ * pass force: true, because an item can leave a pair (shape change, mixed attribution) and take the newest
+ * watermark with it, which would otherwise freeze the record.
+ */
+async function upsertRecord({ subject_id, shape_id, clean, total, lower90, earned_level, contributors = null, watermark, force = false }) {
+  if (force) {
+    await exec(`INSERT INTO records (subject_id, shape_id, clean, total, lower90, earned_level, contributors, watermark)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE clean = VALUES(clean), total = VALUES(total), lower90 = VALUES(lower90),
+        earned_level = VALUES(earned_level), contributors = VALUES(contributors), computed_at = ${NOW},
+        watermark = GREATEST(watermark, VALUES(watermark))`,
+    [subject_id, shape_id, clean, total, lower90, earned_level, contributors, ts(watermark)]);
+    return;
+  }
   await exec(`INSERT INTO records (subject_id, shape_id, clean, total, lower90, earned_level, contributors, watermark)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ON DUPLICATE KEY UPDATE

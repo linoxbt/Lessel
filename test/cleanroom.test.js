@@ -86,3 +86,9 @@ test("taint scan: comments, zero-width, base64, links; clean page is clean", () 
   assert.equal(isSuspect(links), false);
   assert.deepEqual(scan("<p>Restart the ledger worker after deploys. Check dashboards.</p>"), []);
 });
+
+test("a read back-dated to before the assignment can't excuse", () => {
+  const out = C.checkDeclaration({ sourceVersion: 7, readAt: "2026-11-01T00:00:00Z", now: "2026-12-02T00:00:00Z",
+    versionAtRead: 7, notBefore: "2026-12-01T00:00:00Z" });
+  assert.deepEqual(out, { basis: "inferred", version: 7, flag: "read-before-assignment" });
+});

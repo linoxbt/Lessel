@@ -102,7 +102,7 @@ const handlers = {
   backfill,
   hourly,
   "recompute-all": () => recomputeAll(),
-  "recompute-pair": body => recompute(body.agentId, body.shapeId),
+  "recompute-pair": body => recompute(body.agentId, body.shapeId, undefined, { force: true }),
   "recompute-team": body => recomputeTeam(body.shapeId),
   "scan-history": body => scanHistory(body.pageId),
 };
