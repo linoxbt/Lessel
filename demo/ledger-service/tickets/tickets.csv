@@ -197,28 +197,28 @@ Service: ledger. Expected change class: business-logic.","Task","ledger","lessel
 "Lower USD fee floor to 25 cents (3)","Change the USD minimum fee from 30 to 25 minor units in src/domain/fees.ts, with tests. Variant 3: pick a different column, limit or test case than earlier tickets with this title.
 
 Service: ledger. Expected change class: business-logic.","Task","ledger","lessel-business-logic","Atlas"
-"Raise ledger rate limit for batch jobs","Raise the ledger rate limit in services/ledger/config/limits.json for nightly batch jobs. Follow the rate-limit section of the Ledger runbook: https://YOUR-SITE.atlassian.net/wiki/spaces/ENG/pages/RUNBOOK_ID/Ledger+runbook
+"Raise ledger rate limit for batch jobs","Raise the ledger rate limit in services/ledger/config/limits.json for nightly batch jobs. Follow the rate-limit section of the Ledger runbook: https://lessel.atlassian.net/wiki/spaces/ENG/pages/557057/Ledger+runbook
 
 Service: ledger. Expected change class: config-infra.","Task","ledger","lessel-config-infra","Atlas"
-"Tune burst size","Adjust burst in services/ledger/config/limits.json per the Ledger runbook guidance: https://YOUR-SITE.atlassian.net/wiki/spaces/ENG/pages/RUNBOOK_ID/Ledger+runbook
+"Tune burst size","Adjust burst in services/ledger/config/limits.json per the Ledger runbook guidance: https://lessel.atlassian.net/wiki/spaces/ENG/pages/557057/Ledger+runbook
 
 Service: ledger. Expected change class: config-infra.","Task","ledger","lessel-config-infra","Atlas"
 "Add default currency to app config","Add defaultCurrency to services/ledger/config/app.json if missing and document it.
 
 Service: ledger. Expected change class: config-infra.","Task","ledger","lessel-config-infra","Atlas"
-"Lower rate limit for staging","Staging needs a lower rate limit. Change services/ledger/config/limits.json following the Ledger runbook: https://YOUR-SITE.atlassian.net/wiki/spaces/ENG/pages/RUNBOOK_ID/Ledger+runbook
+"Lower rate limit for staging","Staging needs a lower rate limit. Change services/ledger/config/limits.json following the Ledger runbook: https://lessel.atlassian.net/wiki/spaces/ENG/pages/557057/Ledger+runbook
 
 Service: ledger. Expected change class: config-infra.","Task","ledger","lessel-config-infra","Atlas"
-"Raise ledger rate limit for batch jobs (2)","Raise the ledger rate limit in services/ledger/config/limits.json for nightly batch jobs. Follow the rate-limit section of the Ledger runbook: https://YOUR-SITE.atlassian.net/wiki/spaces/ENG/pages/RUNBOOK_ID/Ledger+runbook Variant 2: pick a different column, limit or test case than earlier tickets with this title.
+"Raise ledger rate limit for batch jobs (2)","Raise the ledger rate limit in services/ledger/config/limits.json for nightly batch jobs. Follow the rate-limit section of the Ledger runbook: https://lessel.atlassian.net/wiki/spaces/ENG/pages/557057/Ledger+runbook Variant 2: pick a different column, limit or test case than earlier tickets with this title.
 
 Service: ledger. Expected change class: config-infra.","Task","ledger","lessel-config-infra","Brook"
-"Tune burst size (2)","Adjust burst in services/ledger/config/limits.json per the Ledger runbook guidance: https://YOUR-SITE.atlassian.net/wiki/spaces/ENG/pages/RUNBOOK_ID/Ledger+runbook Variant 2: pick a different column, limit or test case than earlier tickets with this title.
+"Tune burst size (2)","Adjust burst in services/ledger/config/limits.json per the Ledger runbook guidance: https://lessel.atlassian.net/wiki/spaces/ENG/pages/557057/Ledger+runbook Variant 2: pick a different column, limit or test case than earlier tickets with this title.
 
 Service: ledger. Expected change class: config-infra.","Task","ledger","lessel-config-infra","Brook"
 "Add default currency to app config (2)","Add defaultCurrency to services/ledger/config/app.json if missing and document it. Variant 2: pick a different column, limit or test case than earlier tickets with this title.
 
 Service: ledger. Expected change class: config-infra.","Task","ledger","lessel-config-infra","Brook"
-"Lower rate limit for staging (2)","Staging needs a lower rate limit. Change services/ledger/config/limits.json following the Ledger runbook: https://YOUR-SITE.atlassian.net/wiki/spaces/ENG/pages/RUNBOOK_ID/Ledger+runbook Variant 2: pick a different column, limit or test case than earlier tickets with this title.
+"Lower rate limit for staging (2)","Staging needs a lower rate limit. Change services/ledger/config/limits.json following the Ledger runbook: https://lessel.atlassian.net/wiki/spaces/ENG/pages/557057/Ledger+runbook Variant 2: pick a different column, limit or test case than earlier tickets with this title.
 
 Service: ledger. Expected change class: config-infra.","Task","ledger","lessel-config-infra","Brook"
 "Cover fee rounding edge cases","Add tests for fee rounding at exact half values in services/ledger/src/domain/*.test.ts.

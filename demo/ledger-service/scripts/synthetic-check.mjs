@@ -37,19 +37,28 @@ async function openIncident(step, error) {
   if (!JIRA_BASE_URL || !JIRA_EMAIL || !JIRA_API_TOKEN) { console.error("No Jira credentials; not opening an incident."); return; }
   const auth = Buffer.from(`${JIRA_EMAIL}:${JIRA_API_TOKEN}`).toString("base64");
   const text = `Synthetic check failed at step "${step}" on staging, commit ${commit}.\n\n${error}`;
-  const res = await fetch(`${JIRA_BASE_URL}/rest/api/3/issue`, {
+  const fields = {
+    project: { key: process.env.INCIDENT_PROJECT ?? "INC" },
+    issuetype: { name: process.env.INCIDENT_ISSUE_TYPE ?? "Incident" },
+    summary: `Staging synthetic check failed: ${step} (${commit.slice(0, 8)})`,
+    priority: { name: "High" },
+    components: [{ name: process.env.INCIDENT_COMPONENT ?? "ledger" }],
+    description: { type: "doc", version: 1, content: [{ type: "paragraph", content: [{ type: "text", text }] }] },
+  };
+  const create = f => fetch(`${JIRA_BASE_URL}/rest/api/3/issue`, {
     method: "POST",
     headers: { authorization: `Basic ${auth}`, "content-type": "application/json", accept: "application/json" },
-    body: JSON.stringify({ fields: {
-      project: { key: process.env.INCIDENT_PROJECT ?? "INC" },
-      issuetype: { name: process.env.INCIDENT_ISSUE_TYPE ?? "Incident" },
-      summary: `Staging synthetic check failed: ${step} (${commit.slice(0, 8)})`,
-      priority: { name: "High" },
-      components: [{ name: process.env.INCIDENT_COMPONENT ?? "ledger" }],
-      description: { type: "doc", version: 1, content: [{ type: "paragraph", content: [{ type: "text", text }] }] },
-    } }),
+    body: JSON.stringify({ fields: f }),
   });
-  const body = await res.text();
+  let res = await create(fields);
+  let body = await res.text();
+  // A missing component or priority scheme must never stop the incident from being opened: retry without them.
+  if (!res.ok && /components|priority/.test(body)) {
+    console.error(`Retrying without component/priority: ${body.slice(0, 200)}`);
+    const { components, priority, ...rest } = fields;
+    res = await create(rest);
+    body = await res.text();
+  }
   if (!res.ok) console.error(`Couldn't open incident: ${res.status} ${body.slice(0, 300)}`);
   else console.log(`Opened incident ${JSON.parse(body).key}`);
 }

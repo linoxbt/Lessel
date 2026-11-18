@@ -13,6 +13,20 @@ For Codegeist, the easy route is a free **developer site**: https://go.atlassian
 Jira, Jira Service Management and Confluence for a few users. Check while you set it up that **Rovo** is
 available there; the agent connectors and MCP need it.
 
+## Progress on lessel.atlassian.net
+
+| Item | State |
+|---|---|
+| Site `https://lessel.atlassian.net` (Jira, JSM, Confluence) | Done |
+| Confluence space **ENG** | Done |
+| "Ledger runbook" page (id 557057) at **version 6** | Done |
+| Jira **PAY** (software) and **INC** (service management) | Done |
+| Link type "Problem/Incident" (Lessel's default `causedByLinkType`) | Present |
+| INC incident issue type | Named **"[System] Incident"**: set `INCIDENT_ISSUE_TYPE` to that in the pipeline |
+| `ledger` component in INC | Not created (the connector can't). Optional: the pipeline now opens incidents without it |
+| Creating INC issues as you | Jira refuses: add yourself as an **agent** in INC (Project settings → People) before the pipeline opens incidents |
+| 90 PAY tickets | `tickets/tickets.csv` regenerated with the runbook link; created when the agents go live |
+
 ---
 
 ## 1. Accounts to create
