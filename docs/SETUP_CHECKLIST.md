@@ -25,6 +25,10 @@ available there; the agent connectors and MCP need it.
 | INC incident issue type | Named **"[System] Incident"**: set `INCIDENT_ISSUE_TYPE` to that in the pipeline |
 | `ledger` component in INC | Not created (the connector can't). Optional: the pipeline now opens incidents without it |
 | Creating INC issues as you | Jira refuses: add yourself as an **agent** in INC (Project settings → People) before the pipeline opens incidents |
+| **Lessel deployed and installed** (Jira + Confluence, development environment) | Done. Database created; Confluence events reach it |
+| Link between the two apps (signed web trigger, secret in both apps) | Done and tested live |
+| **Lessel for Bitbucket** registered and deployed | Done. **Install** waits for your Bitbucket workspace |
+| Bitbucket token for Lessel (`BITBUCKET_EMAIL`, `BITBUCKET_API_TOKEN`) | Waits for the Bitbucket workspace |
 | 90 PAY tickets | `tickets/tickets.csv` regenerated with the runbook link; created when the agents go live |
 
 ---
