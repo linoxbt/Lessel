@@ -1,0 +1,13 @@
+{
+  "name": "lessel-bitbucket",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Lessel for Bitbucket: forwards Bitbucket events and the merge check to Lessel",
+  "license": "MIT",
+  "type": "commonjs",
+  "main": "src/index.js",
+  "engines": { "node": ">=22" },
+  "dependencies": {
+    "@forge/api": "^8.5.0"
+  }
+}

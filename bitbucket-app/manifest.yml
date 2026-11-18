@@ -1,0 +1,43 @@
+app:
+  id: ari:cloud:ecosystem::app/00000000-0000-0000-0000-000000000000 # replaced by `forge register`
+  runtime:
+    name: nodejs22.x
+
+modules:
+  trigger:
+    - key: bitbucket-events
+      function: onEvent
+      events:
+        - avi:bitbucket:created:pullrequest
+        - avi:bitbucket:updated:pullrequest
+        - avi:bitbucket:fulfilled:pullrequest
+        - avi:bitbucket:updated:pullrequest-reviewer-status
+        - avi:bitbucket:push:repository
+        - avi:bitbucket:completed:deployment
+
+  bitbucket:mergeCheck:
+    - key: lessel-gate
+      function: mergeCheck
+      name: Lessel autonomy gate
+      description: Applies Lessel's decision for this agent and task to the PR.
+      triggers:
+        - on-code-pushed
+        - on-reviewer-status-changed
+        - on-merge
+
+  function:
+    - key: onEvent
+      handler: index.onEvent
+    - key: mergeCheck
+      handler: index.mergeCheck
+
+permissions:
+  scopes:
+    - read:pullrequest:bitbucket
+    - read:repository:bitbucket
+    - read:pipeline:bitbucket
+  external:
+    fetch:
+      backend:
+        # Lessel's web trigger (its URL is set in LESSEL_BRIDGE_URL).
+        - address: "*.hello.atlassian-dev.net"

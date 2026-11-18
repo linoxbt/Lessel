@@ -2,9 +2,8 @@
 // Forge function entry points (manifest `function` handlers).
 
 const { onJiraEvent } = require("./events/jira");
-const { onBitbucketEvent } = require("./events/bitbucket");
 const { onConfluenceEvent } = require("./events/confluence");
-const { mergeGate } = require("./enforce/gate");
+const { bitbucketBridge } = require("./bridge");
 const { validateReadyToMerge, validateAgentStart } = require("./enforce/validators");
 const actions = require("./mcp/actions");
 const jobs = require("./jobs");
@@ -29,13 +28,12 @@ async function onLifecycle() {
 
 module.exports = {
   onJiraEvent,
-  onBitbucketEvent,
   onConfluenceEvent,
   onLifecycle,
   resolveOutcomes,
   reportPersonalData,
-  jobs: jobs.jobsResolver(),
-  mergeGate,
+  jobs: jobs.consume,
+  bitbucketBridge,
   validateReadyToMerge,
   validateAgentStart,
   uiResolver,

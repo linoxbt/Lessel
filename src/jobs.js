@@ -11,12 +11,45 @@ const { scanHistory } = require("./services/cleanroom");
 const { onPullRequest, onDeployment, onPush } = require("./events/bitbucket");
 const { onAssigned, onLinkCreated } = require("./events/jira");
 
-async function enqueue(body, concurrencyKey = null) {
+/**
+ * Push events, keeping the per-key concurrency limit where the queue accepts it. Some sites reject events that
+ * carry `concurrency` (a plain 400): then they're pushed without it. Every job is idempotent, and the hourly
+ * forced sweep corrects any record two concurrent jobs might race on.
+ */
+let concurrencyRejected = false;
+let migrated = false;
+async function pushEvents(events) {
   const { Queue } = require("@forge/events");
-  const queue = new Queue({ key: "lessel-jobs" });
+  // Log the queue service's own error text: a bare "400 Bad Request" from the SDK says nothing.
+  const client = async (path, req) => {
+    const res = await require("@forge/api").__requestAtlassianAsApp(path, req);
+    if (res.status === 201) return res;
+    const text = await res.text().catch(() => "");
+    if (res.status !== 202) console.error(`queue push ${res.status}: ${text.slice(0, 500)}`);
+    return { status: res.status, statusText: res.statusText, ok: res.ok,
+      text: async () => text, json: async () => JSON.parse(text) };
+  };
+  const queue = new Queue({ key: "lessel-jobs" }, client);
+  const strip = list => list.map(({ concurrency, ...rest }) => rest);
+  for (let i = 0; i < events.length; i += 50) {          // push takes up to 50
+    const batch = events.slice(i, i + 50);
+    if (concurrencyRejected) { await queue.push(strip(batch)); continue; }
+    try {
+      await queue.push(batch);
+    } catch (e) {
+      if (!/^400\b/.test(String(e?.message)) || !batch.some(ev => ev.concurrency)) throw e;
+      console.warn("queue rejected concurrency keys; pushing without them");
+      concurrencyRejected = true;
+      await queue.push(strip(batch));
+    }
+  }
+}
+
+async function enqueue(body, concurrencyKey = null) {
   const ev = { body };
   if (concurrencyKey) ev.concurrency = { key: concurrencyKey, limit: 1 };
-  return queue.push(ev);
+  await pushEvents([ev]);
+  return { queued: 1 };
 }
 
 /**
@@ -38,9 +71,7 @@ async function hourly(payload = {}) {
     ...shapes.map(s => ({ body: { type: "recompute-team", shapeId: s.shape_id },
       concurrency: { key: `team-${s.shape_id}`.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 100), limit: 1 } })),
   ];
-  const { Queue } = require("@forge/events");
-  const queue = new Queue({ key: "lessel-jobs" });
-  for (let i = 0; i < events.length; i += 50) await queue.push(events.slice(i, i + 50));   // push takes up to 50
+  await pushEvents(events);
   return { reminded, expired, queued: events.length };
 }
 
@@ -108,17 +139,15 @@ const handlers = {
   "privacy-report": () => require("./services/privacy").reportPersonalData(),
 };
 
-/** Consumer resolver for the lessel-jobs queue. */
-function jobsResolver() {
-  const Resolver = require("@forge/resolver").default;
-  const resolver = new Resolver();
-  resolver.define("run", async ({ payload }) => {
-    const type = payload?.type;
-    if (!handlers[type]) { console.warn("unknown job", type); return; }
-    const out = await handlers[type](payload);
-    console.log(`job ${type} done`, JSON.stringify(out)?.slice(0, 1000));
-  });
-  return resolver.getDefinitions();
+/** Consumer for the lessel-jobs queue (event schema v2: a plain function that gets the pushed event). */
+async function consume(event) {
+  const payload = event?.body ?? {};
+  const type = payload.type;
+  if (!handlers[type]) { console.warn("unknown job", type); return; }
+  // Make sure the tables exist (once per function start): a lost install event must not leave Lessel without them.
+  if (type !== "migrate" && !migrated) { await migrateForge(); migrated = true; }
+  const out = await handlers[type](payload);
+  console.log(`job ${type} done`, JSON.stringify(out)?.slice(0, 1000));
 }
 
-module.exports = { enqueue, hourly, backfill, handlers, jobsResolver };
+module.exports = { enqueue, pushEvents, hourly, backfill, handlers, consume };

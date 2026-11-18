@@ -148,9 +148,11 @@ const MIGRATIONS = [
 ];
 
 /** Forge: run through @forge/sql's migrationRunner, which records what's been applied. */
+let enqueued = false;
 async function migrateForge() {
   const { migrationRunner } = require("@forge/sql");
-  for (const [name, ddl] of MIGRATIONS) migrationRunner.enqueue(name, ddl);
+  // The runner is a module singleton: enqueue each migration once per function start, then run (idempotent).
+  if (!enqueued) { for (const [name, ddl] of MIGRATIONS) migrationRunner.enqueue(name, ddl); enqueued = true; }
   return migrationRunner.run();
 }
 
