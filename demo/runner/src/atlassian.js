@@ -8,10 +8,21 @@ async function json(res, what) {
 
 const basic = (user, token) => `Basic ${Buffer.from(`${user}:${token}`).toString("base64")}`;
 
-/** Confluence page id from a URL (/pages/<id>/... or ?pageId=<id>). */
+/** Confluence page id from a URL (/pages/<id>/..., ?pageId=<id> or a /wiki/x/ short link). */
 export function pageIdFromUrl(url) {
   const s = String(url || "");
-  return s.match(/\/pages\/(\d+)/)?.[1] ?? s.match(/[?&]pageId=(\d+)/)?.[1] ?? null;
+  return s.match(/\/pages\/(\d+)/)?.[1] ?? s.match(/[?&]pageId=(\d+)/)?.[1] ?? tinyLinkPageId(s);
+}
+
+/** Confluence short links (/wiki/x/<code>): the page id as little-endian bytes in URL-safe base64. */
+function tinyLinkPageId(s) {
+  const code = s.match(/\/x\/([A-Za-z0-9_-]+)/)?.[1];
+  if (!code) return null;
+  const bytes = Buffer.from(code.replace(/-/g, "+").replace(/_/g, "/"), "base64");
+  if (!bytes.length || bytes.length > 7) return null;
+  let id = 0;
+  for (let i = bytes.length - 1; i >= 0; i--) id = id * 256 + bytes[i];
+  return id > 0 ? String(id) : null;
 }
 
 /** Storage format to text. Hidden spans keep their text: that's what an agent reading the raw page sees. */

@@ -92,3 +92,11 @@ test("a read back-dated to before the assignment can't excuse", () => {
     versionAtRead: 7, notBefore: "2026-12-01T00:00:00Z" });
   assert.deepEqual(out, { basis: "inferred", version: 7, flag: "read-before-assignment" });
 });
+
+test("Confluence page ids come from full, legacy and short (/wiki/x/) links", () => {
+  const { pageIdFromUrl } = require("../src/adapters/confluence");
+  assert.equal(pageIdFromUrl("https://s.atlassian.net/wiki/spaces/ENG/pages/557057/Ledger+runbook"), "557057");
+  assert.equal(pageIdFromUrl("https://s.atlassian.net/wiki/pages/viewpage.action?pageId=42"), "42");
+  assert.equal(pageIdFromUrl("https://s.atlassian.net/wiki/x/AYAI"), "557057");
+  assert.equal(pageIdFromUrl("https://s.atlassian.net/wiki/spaces/ENG/overview"), null);
+});

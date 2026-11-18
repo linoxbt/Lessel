@@ -100,7 +100,18 @@ async function getSpace(spaceId) {
 /** Page id from a Confluence URL: /wiki/spaces/ENG/pages/123456/Title or ?pageId=123456. */
 function pageIdFromUrl(url) {
   const s = String(url || "");
-  return s.match(/\/pages\/(\d+)/)?.[1] ?? s.match(/[?&]pageId=(\d+)/)?.[1] ?? null;
+  return s.match(/\/pages\/(\d+)/)?.[1] ?? s.match(/[?&]pageId=(\d+)/)?.[1] ?? tinyLinkPageId(s);
+}
+
+/** Confluence short links (/wiki/x/<code>) are the page id as little-endian bytes in URL-safe base64. */
+function tinyLinkPageId(s) {
+  const code = s.match(/\/x\/([A-Za-z0-9_-]+)/)?.[1];
+  if (!code) return null;
+  const bytes = Buffer.from(code.replace(/-/g, "+").replace(/_/g, "/"), "base64");
+  if (!bytes.length || bytes.length > 7) return null;
+  let id = 0;
+  for (let i = bytes.length - 1; i >= 0; i--) id = id * 256 + bytes[i];
+  return id > 0 ? String(id) : null;
 }
 
 module.exports = { getPage, updatePage, listVersions, versionAt, getSpace, pageIdFromUrl,
