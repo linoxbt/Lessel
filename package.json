@@ -1,0 +1,31 @@
+{
+  "name": "lessel",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Earned autonomy for AI agents in Jira (Forge app, Codegeist 2026)",
+  "license": "MIT",
+  "type": "commonjs",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint": "forge lint",
+    "check:manifest": "node scripts/validate-manifest.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@forge/api": "^8.5.0",
+    "@forge/bridge": "^7.3.0",
+    "@forge/events": "^3.0.10",
+    "@forge/llm": "^1.0.10",
+    "@forge/react": "^12.5.0",
+    "@forge/resolver": "^2.0.2",
+    "@forge/sql": "^4.0.10",
+    "react": "^18.3.1"
+  },
+  "devDependencies": {
+    "ajv": "^8.20.0",
+    "yaml": "^2.9.1"
+  }
+}
