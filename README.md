@@ -89,6 +89,8 @@ npm run lint:offline          # Forge's own client-side linters (scopes, endpoin
 
 ## Deploy (needs your Atlassian account)
 
+Every account, key and ID you need, where to get each one and where it goes: [`docs/SETUP_CHECKLIST.md`](docs/SETUP_CHECKLIST.md).
+
 1. `npm i -g @forge/cli`, then `forge login` with an Atlassian API token.
 2. `forge register` to replace the placeholder app id in `manifest.yml`.
 3. `forge lint`, then `forge deploy -e development`.
