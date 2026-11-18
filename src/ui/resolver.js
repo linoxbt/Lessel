@@ -11,6 +11,7 @@ const { shapeObj } = require("../services/shapes");
 const { decide } = require("../services/decide");
 const signals = require("../services/signals");
 const cleanroom = require("../services/cleanroom");
+const graph = require("../services/graph");
 
 class Forbidden extends Error {}
 
@@ -71,10 +72,12 @@ async function evidence({ agentId, shapeId }) {
   return { items: out, decisions: events.map(e => ({ cause: e.cause, at: e.at, after: JSON.parse(e.after_json) })) };
 }
 
-async function panel({ issueKey }) {
+async function panel({ issueKey }, context = {}) {
   const cfg = await repo.getSettings();
   const item = await repo.getItem(issueKey);
   if (!item) return { tracked: false };
+  // Teamwork Graph runs as the viewing user: pick up incidents linked in the graph before rendering.
+  const graphSync = await graph.syncIncidents({ issueKey, cloudId: context.cloudId }, cfg);
   const agentId = item.agent_id ?? item.assigned_agent_id;
   const agent = agentId ? await repo.getAgent(agentId) : null;
   const shape = shapeObj(item.shape_id, item.classified_by, cfg);
@@ -98,6 +101,8 @@ async function panel({ issueKey }) {
       method: r.method, flag: r.flag, late: !!(item.merged_at && r.recorded_at > item.merged_at),
       sourceState: r.source.state, range: r.source.tainted_from_version ? rangeText(r.source) : null })),
     shapeOptions: (await repo.listShapes()).map(s => s.shape_id),
+    graph: graphSync,
+    devChain: await graph.devChain({ issueKey, cloudId: context.cloudId }, cfg),
   };
 }
 
@@ -119,24 +124,24 @@ async function sources() {
 const DEFINITIONS = {
   getBoard: () => board(),
   getEvidence: ({ payload }) => evidence(payload),
-  getPanel: ({ payload }) => panel(payload),
+  getPanel: ({ payload, context }) => panel(payload, context),
   confirmCause: async ({ payload, context }) => {
     const sig = await repo.getSignal(payload.signalId);
     await requireEdit(sig?.issue_key);
     await signals.confirmCause(payload.signalId, context.accountId);
-    return panel({ issueKey: sig.issue_key });
+    return panel({ issueKey: sig.issue_key }, context);
   },
   dismissCause: async ({ payload, context }) => {
     const sig = await repo.getSignal(payload.signalId);
     await requireEdit(sig?.issue_key);
     await signals.dismissCause(payload.signalId, context.accountId);
-    return panel({ issueKey: sig.issue_key });
+    return panel({ issueKey: sig.issue_key }, context);
   },
   reopenDecision: async ({ payload, context }) => {
     await requireAdmin();
     const sig = await repo.getSignal(payload.signalId);
     await signals.reopenDecision(payload.signalId, context.accountId, payload.note);
-    return panel({ issueKey: sig.issue_key });
+    return panel({ issueKey: sig.issue_key }, context);
   },
   confirmShape: async ({ payload, context }) => {
     await requireEdit(payload.issueKey);
@@ -147,7 +152,7 @@ const DEFINITIONS = {
       await repo.upsertPr({ ...p, shape_id: payload.shapeId ?? p.shape_id, classified_by: "manual" });
     }
     await repo.logStaffAction({ actor: context.accountId, action: "set-shape", target: payload.issueKey, note: payload.shapeId ?? item.shape_id });
-    return panel({ issueKey: payload.issueKey });
+    return panel({ issueKey: payload.issueKey }, context);
   },
   getSettings: async () => { await requireAdmin(); return settingsView(); },
   saveSetting: async ({ payload, context }) => {

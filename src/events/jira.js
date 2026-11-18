@@ -79,32 +79,43 @@ async function onLinkCreated(event, cfg) {
   const work = issues[workIdx];
   const other = issues[1 - workIdx];
   if (!other) return;
+  const type = link.type ?? link.issueLinkType ?? {};
+  const causedBy = [type.name, type.inward, type.outward, type.inwardName, type.outwardName].includes(cfg.causedByLinkType);
+  return recordLinkedIssue({ work, other, causedBy, linkId, actor: event.atlassianId ?? null, via: "link" }, cfg);
+}
+
+/**
+ * Record an incident or bug linked to a tracked work item (§10.3). Used by issue-link events and by the
+ * Teamwork Graph sync (via "graph": never confirms, only associates). Returns the signal id or null.
+ */
+async function recordLinkedIssue({ work, other, causedBy = false, linkId = null, actor = null, via = "link" }, cfg) {
   const otherProject = other.fields?.project?.key ?? projectOf(other.key);
   const otherType = other.fields?.issuetype?.name;
   const kind = cfg.incidentProjects.includes(otherProject) ? "incident" : cfg.bugIssueTypes.includes(otherType) ? "bug" : null;
-  if (!kind) return;
-
-  const type = link.type ?? link.issueLinkType ?? {};
-  const causedBy = [type.name, type.inward, type.outward, type.inwardName, type.outwardName].includes(cfg.causedByLinkType);
+  if (!kind) return null;
   const item = await repo.getItem(work.key);
+  if (!item) return null;
+  const confirms = causedBy && via === "link";
   const shapeService = item.shape_id.split("/")[0];
   const incidentService = (other.fields?.components ?? []).map(c => c.name).find(n => n === shapeService) ?? null;
   const causality = kind === "incident"
-    ? incidentCausality({ item, incidentCreatedAt: other.fields?.created, incidentService, shapeService, viaCausedByLink: causedBy }, cfg)
-    : (causedBy && cfg.linkConfirms ? "confirmed" : "associated");
+    ? incidentCausality({ item, incidentCreatedAt: other.fields?.created, incidentService, shapeService, viaCausedByLink: confirms }, cfg)
+    : (confirms && cfg.linkConfirms ? "confirmed" : "associated");
   const signal_id = `${kind}:${other.key}:${work.key}`;
-  const decidedBy = causality === "confirmed" ? (event.atlassianId ?? `link:${linkId}`) : null;
-  const via = causality === "confirmed" ? `link:${linkId}` : null;
+  const decidedBy = causality === "confirmed" ? (actor ?? `link:${linkId}`) : null;
+  const confirmedVia = causality === "confirmed" ? `link:${linkId}` : null;
   const severity = kind === "incident" ? severityOf(other.fields, cfg) : null;
 
   const inserted = await repo.insertSignal({ signal_id, issue_key: work.key, kind, ref: other.key, severity,
-    causality, confirmed_via: via, decided_by: decidedBy });
+    causality, confirmed_via: confirmedVia, decided_by: decidedBy });
   if (!inserted && causality === "confirmed") {
     // an existing associated/suspected signal is upgraded by a caused-by link
-    await repo.setCausality(signal_id, "confirmed", { by: decidedBy, via, from: ["associated", "suspected"] });
+    await repo.setCausality(signal_id, "confirmed", { by: decidedBy, via: confirmedVia, from: ["associated", "suspected"] });
   }
+  if (!inserted && causality !== "confirmed") return signal_id; // already known: nothing changed
   if (severity != null) await repo.setSeverity(signal_id, severity);
-  let text = kind === "incident" ? `${other.key} was linked to ${work.key}` : `bug ${other.key} was linked to ${work.key}`;
+  const how = via === "graph" ? " (found in Teamwork Graph)" : "";
+  let text = kind === "incident" ? `${other.key} was linked to ${work.key}${how}` : `bug ${other.key} was linked to ${work.key}${how}`;
   const sig = await repo.getSignal(signal_id);
   if (sig.causality === "confirmed") {
     const src = await maybeExcuse(signal_id);
@@ -113,6 +124,7 @@ async function onLinkCreated(event, cfg) {
   }
   const fresh = await repo.getSignal(signal_id);
   await afterItemChange(work.key, { id: signal_id, rev: fresh.rev, text }, cfg);
+  return signal_id;
 }
 
 async function onComment(event, cfg) {
@@ -149,4 +161,4 @@ async function onJiraEvent(event) {
   });
 }
 
-module.exports = { onJiraEvent, onLinkCreated, onAssigned, onUpdated, eventKey };
+module.exports = { onJiraEvent, onLinkCreated, recordLinkedIssue, onAssigned, onUpdated, eventKey };

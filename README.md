@@ -12,8 +12,9 @@ numbers below (§) refer to it.
 
 ## Status
 
-The P1 core and P2 Clean Room are built and tested locally (P3 actions too). Nothing has been deployed yet:
-deploying needs your Atlassian login.
+The P1 core, P2 Clean Room, P3 actions and the Teamwork Graph integration are built and tested locally. The
+demo rig (ledger-service repo, A2A runner, Demo Agents app) is in [`demo/`](demo/README.md). Nothing has been
+deployed yet: deploying needs your Atlassian login.
 
 | Area | State |
 |---|---|
@@ -28,7 +29,7 @@ deploying needs your Atlassian login.
 | Rovo actions / MCP tools (caller-bound identity), Dispatcher agent + skill | Built, tested |
 | UI Kit board (grid, evidence drawer, Clean Room tab), issue panel, settings page | Built, bundles; not yet seen on a live site |
 | Backfill and hourly jobs on the `lessel-jobs` queue | Built; backfill not yet run against real data |
-| Teamwork Graph queries (§10.5) | Not built yet: scopes are declared; needs the Query Builder identifiers (week-1 check #6) |
+| Teamwork Graph (§10.5): saved Cypher queries; incidents linked in the graph become associated signals when the panel opens; commit → PR → deployment counts in the panel | Built, tested with a fake graph; queries register with `scripts/register-graph-queries.js` |
 | Start validator, quarantine/restore, LLM scan stage (P4) | Not built (cut order) |
 
 ## Layout
@@ -97,7 +98,9 @@ npm run lint:offline          # Forge's own client-side linters (scopes, endpoin
 8. Jira: add the **Lessel ready-to-merge check** validator to your Ready to merge transition.
 9. Enable external MCP access for the app (Atlassian Administration → Apps → Sites → your site → Connected apps),
    then connect each agent's MCP client with its own account (§15.2).
-10. Run **Backfill history** once agents have done some work.
+10. Register the Teamwork Graph queries and paste the printed keys into the `graphQueries` setting:
+    `ATLASSIAN_SITE=… ATLASSIAN_EMAIL=… ATLASSIAN_API_TOKEN=… node scripts/register-graph-queries.js`.
+11. Run **Backfill history** once agents have done some work.
 
 ## Confirmed while building
 
@@ -109,6 +112,15 @@ npm run lint:offline          # Forge's own client-side linters (scopes, endpoin
 - `TIMESTAMP` columns reject 1970-01-01 00:00:00, so the recompute watermark floor is 2000-01-01. The end-to-end
   test caught this.
 
+- **Teamwork Graph is user-only.** `requestTeamworkGraph` exists only on `asUser()` in `@forge/api`, so
+  triggers can't query the graph. That settles the spec's open question about calling it from triggers. As the
+  spec's fallback says, resolution stays on events + REST, and the graph powers the panel (incident pickup and
+  the dev chain).
+- **Saved queries only.** New apps can't send raw Cypher; queries are saved with `/gateway/api/twg/cypher-queries`
+  and run through `customQuery` (25 rows a page). In the graph, incidents are `JiraWorkItem`s, linked by
+  `jsm_incident_links_jira_work_item`.
+- **A test-only change** inside `src/domain` was classified as business-logic. Test-file rules now come first.
+
 ## Still to confirm on a live site
 
 Each one is marked `[verify]` in the code. The full list is in the spec appendix.
@@ -119,6 +131,8 @@ Each one is marked `[verify]` in the code. The full list is in the spec appendix
 - Whether the issue-link created event carries the creator's accountId (otherwise `link:<id>` is recorded).
 - The Bitbucket merge-base endpoint for deployment containment.
 - Confluence v2 version-history pagination.
+- The work-item ARI format for graph parameters (`ari:cloud:jira:<cloudId>:issue/<issueId>`), and whether Basic
+  auth with an API token is accepted for registering saved queries.
 
 ## Deviations from the spec
 

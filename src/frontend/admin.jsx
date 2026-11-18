@@ -27,6 +27,7 @@ const EDITABLE = [
   ["suspectedExpiryHours", "Hours after the window before suspected signals expire"],
   ["teamBaseline", "Team baseline floors"],
   ["cleanRoom", "Clean Room scope and allowed link domains"],
+  ["graphQueries", "Teamwork Graph saved-query keys (from scripts/register-graph-queries.js)"],
 ];
 
 function SettingEditor({ name, help, value, onSave }) {

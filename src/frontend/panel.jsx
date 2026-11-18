@@ -95,6 +95,14 @@ function App() {
       <Heading as="h4">Signals</Heading>
       <Signals data={data} act={act} onReopen={s => { setNote(""); setReopen(s); }} />
 
+      <Heading as="h4">Teamwork Graph</Heading>
+      <Text>
+        {data.devChain && !data.devChain.error
+          ? `${data.devChain.commits} commit(s), ${data.devChain.prs} pull request(s), ${data.devChain.deployments} deployment(s) linked to this work item.`
+          : data.graph?.skipped ?? (data.graph?.error || data.devChain?.error ? `Graph unavailable (${data.graph?.error ?? data.devChain?.error}).` : "No graph data yet.")}
+        {data.graph?.added?.length ? ` New incident links found in the graph: ${data.graph.added.join(", ")} (associated, not confirmed).` : ""}
+      </Text>
+
       <Heading as="h4">Context</Heading>
       {data.context.state !== "clean" ? <SectionMessage appearance={data.context.state === "blocked" ? "error" : "warning"}><Text>{data.context.reason}</Text></SectionMessage> : null}
       <Reads reads={data.reads} />

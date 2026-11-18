@@ -317,3 +317,33 @@ test("gate edge cases: human PRs, missing keys, unknown items", async (t) => {
   const { humanApprovals } = require("../src/services/decide");
   assert.equal(await humanApprovals(w.prs.get("r1#900")), 1);
 });
+
+test("Teamwork Graph: an incident linked only in the graph becomes an associated signal when the panel opens", async (t) => {
+  if (!pool) return t.skip("no test database");
+  const { setPorts } = require("../src/ports");
+  await repo.setSetting("graphQueries", { incidents: "qk-inc", devChain: "qk-dev" });
+  await ticket("PAY-501", BROOK, MIG);
+  w.issue("INC-90", { project: { key: "INC" }, issuetype: { name: "Incident" }, priority: { name: "Highest" } });
+  const seenArgs = [];
+  setPorts({ graph: {
+    incidentsFor: async args => { seenArgs.push(args); return [{ key: "INC-90", summary: "staging down", id: "ari:x" }]; },
+    devChainFor: async () => ({ commits: ["c1", "c2"], prs: ["p1"], deployments: ["d1"] }),
+  } });
+  const view = await ui.panel({ issueKey: "PAY-501" }, { cloudId: "cloud-1" });
+  assert.deepEqual(view.graph, { incidents: ["INC-90"], added: ["INC-90"] });
+  assert.deepEqual(view.devChain, { commits: 2, prs: 1, deployments: 1 });
+  assert.equal(seenArgs[0].queryKey, "qk-inc");
+  assert.equal(seenArgs[0].cloudId, "cloud-1");
+  const sig = await repo.getSignal("incident:INC-90:PAY-501");
+  assert.equal(sig.causality, "associated", "the graph never confirms a cause");
+  assert.equal(sig.severity, 1);
+  assert.equal(view.signals.find(s => s.id === "incident:INC-90:PAY-501").causality, "associated");
+  // Opening the panel again changes nothing.
+  const again = await ui.panel({ issueKey: "PAY-501" }, { cloudId: "cloud-1" });
+  assert.deepEqual(again.graph.added, []);
+  // Graph failures don't break the panel.
+  setPorts({ graph: { incidentsFor: async () => { const e = new Error("x"); e.code = "QUERY_NOT_FOUND"; throw e; }, devChainFor: async () => ({ commits: [], prs: [], deployments: [] }) } });
+  const failed = await ui.panel({ issueKey: "PAY-501" }, { cloudId: "cloud-1" });
+  assert.equal(failed.graph.error, "QUERY_NOT_FOUND");
+  assert.equal(failed.tracked, true);
+});

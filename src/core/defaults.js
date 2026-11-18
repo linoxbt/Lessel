@@ -53,6 +53,7 @@ const DEFAULTS = Object.freeze({
     { pattern: "docs/**", cls: "docs-copy" },
     { pattern: "src/ui/strings/**", cls: "docs-copy" },
   ],
+  graphQueries: { incidents: null, devChain: null },  // queryKeys from scripts/register-graph-queries.js
   cleanRoom: {
     confluenceSpaces: ["ENG"],
     jiraProjects: ["PAY"],
