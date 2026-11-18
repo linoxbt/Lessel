@@ -9,7 +9,8 @@ Lessel excuses the agent and goes after the source instead.
 
 The full design is in [`docs/Lessel_Build_Spec_v1.2.md`](docs/Lessel_Build_Spec_v1.2.md) (PDF alongside). Section
 numbers below (§) refer to it. Submission material: [judge guide](docs/JUDGES.md),
-[Devpost write-up](docs/DEVPOST.md), [video plan](docs/VIDEO.md).
+[Devpost write-up](docs/DEVPOST.md), [video plan](docs/VIDEO.md), [Marketplace draft](docs/MARKETPLACE.md),
+[data handling](docs/PRIVACY.md).
 
 ## Status
 
@@ -34,7 +35,9 @@ deployed yet: deploying needs your Atlassian login.
 | P4: agent start validator, Clean Room restore (republish last clean version), History tab | Built, tested |
 | Judge snapshot export/import (no person ids; "Imported history" banner) | Built, round-trip tested |
 | P4: Clean Room LLM stage (Qwen via Fortytwo, or Forge LLMs), quote-grounded and advisory | Built, tested with a fake Qwen |
-| P4: page quarantine (restrictions API) | Not built (cut order) |
+| P4: page quarantine (label, footer comment, optional read restriction; lifted on fix/restore), reminders before a suspected cause expires, reassignment hint in the panel | Built, tested |
+| Setup check on the settings page (config + live Jira checks) | Built, tested |
+| CI (GitHub Actions: tests with MariaDB, runner, ledger-service, manifests, bundles, Forge linters) | Added |
 
 ## Layout
 

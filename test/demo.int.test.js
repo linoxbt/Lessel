@@ -78,6 +78,7 @@ async function linkIncident(incKey, workKey, { causedBy = false, priority = "Hig
 
 test.before(async () => {
   pool = await connectDb();
+  if (!pool && process.env.LESSEL_REQUIRE_DB) throw new Error("LESSEL_REQUIRE_DB is set but no test database is reachable");
 });
 test.after(async () => { teardown(); await pool?.end(); });
 

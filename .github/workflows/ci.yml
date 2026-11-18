@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lessel:
+    name: Lessel (Forge app)
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_DATABASE: lessel_test
+          MARIADB_USER: lessel
+          MARIADB_PASSWORD: lessel
+          MARIADB_ROOT_PASSWORD: root
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s --health-timeout=5s --health-retries=30
+    env:
+      LESSEL_TEST_DB: mysql://lessel:lessel@127.0.0.1:3306/lessel_test
+      LESSEL_REQUIRE_DB: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Manifests match the Forge schema
+        run: |
+          npm run check:manifest
+          node scripts/validate-manifest.js demo/agents-app
+      - name: Tests (unit + end-to-end against MariaDB)
+        run: npm test
+      - name: UI Kit screens bundle
+        run: for f in board panel admin; do npx esbuild "src/frontend/$f.jsx" --bundle --outfile=/dev/null --loader:.jsx=jsx; done
+      - name: Forge linters (offline, no login)
+        run: |
+          npm i -g @forge/cli
+          npm run lint:offline
+          node scripts/offline-lint.js demo/agents-app
+
+  runner:
+    name: Demo runner (A2A + Qwen agent)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: demo/runner
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: demo/runner/package-lock.json
+      - run: npm ci
+      - run: npm test
+
+  ledger-service:
+    name: Demo ledger-service
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: ledger
+        working-directory: demo/ledger-service/services/ledger
+        run: npm ci && npm test
+      - name: checkout
+        working-directory: demo/ledger-service/services/checkout
+        run: npm test
+      - name: scripts parse
+        working-directory: demo/ledger-service
+        run: |
+          node --check scripts/synthetic-check.mjs
+          bash -n scripts/deploy-staging.sh
