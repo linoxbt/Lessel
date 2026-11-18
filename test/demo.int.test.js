@@ -528,3 +528,29 @@ test("Setup check reports config and live Jira state in plain sentences", async 
   assert.equal(r.ai.status, "ok");
   delete process.env.FORTYTWO_API_KEY;
 });
+
+test("hourly fan-out: one queued job per pair (and team shape), serialised per pair, same records as a direct recompute", async (t) => {
+  if (!pool) return t.skip("no test database");
+  const pushed = [];
+  const eventsPath = require.resolve("@forge/events");
+  const saved = require.cache[eventsPath];
+  require.cache[eventsPath] = { id: eventsPath, filename: eventsPath, loaded: true,
+    exports: { Queue: class { constructor(p) { this.key = p.key; } async push(evs) { assert.ok(evs.length <= 50); pushed.push(...evs); return { jobId: "j" }; } } } };
+  try {
+    const before = (await repo.allRecords()).map(r => [r.subject_id, r.shape_id, r.clean, r.total]);
+    await pool.query("DELETE FROM records");
+    const out = await jobs.hourly({ fanOut: true });
+    const pairs = await repo.agentShapePairs();
+    assert.equal(out.queued, pushed.length);
+    assert.equal(pushed.filter(e => e.body.type === "recompute-pair").length, pairs.length);
+    for (const e of pushed) {
+      assert.equal(e.concurrency.limit, 1);
+      assert.match(e.concurrency.key, /^[A-Za-z0-9_-]+$/);
+    }
+    for (const e of pushed) await jobs.handlers[e.body.type](e.body);
+    const after = (await repo.allRecords()).map(r => [r.subject_id, r.shape_id, r.clean, r.total]);
+    assert.deepEqual(after, before);
+  } finally {
+    if (saved) require.cache[eventsPath] = saved; else delete require.cache[eventsPath];
+  }
+});

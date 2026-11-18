@@ -4,7 +4,7 @@
 const repo = require("./db/repo");
 const { ports } = require("./ports");
 const { migrateForge } = require("./db/schema");
-const { recomputeAll } = require("./services/recompute");
+const { recomputeAll, recompute, recomputeTeam } = require("./services/recompute");
 const { expireSuspected, remindSuspected } = require("./services/signals");
 const { refreshItem } = require("./services/recompute");
 const { scanHistory } = require("./services/cleanroom");
@@ -19,14 +19,29 @@ async function enqueue(body, concurrencyKey = null) {
   return queue.push(ev);
 }
 
-/** Hourly sweep: close windows, expire suspected signals, recompute everything. */
-async function hourly() {
+/**
+ * Hourly sweep: close windows, remind and expire suspected signals, then recompute every record and hold.
+ * With fanOut (the scheduled trigger), recomputes go out as one queue job per agent/shape pair, serialised
+ * per pair with a concurrency key, so a large site never runs into one job's time limit.
+ */
+async function hourly(payload = {}) {
   const cfg = await repo.getSettings();
   for (const item of await repo.itemsPastWindow(ports.now())) await refreshItem(item.issue_key, cfg);
   const reminded = await remindSuspected(cfg);
   const expired = await expireSuspected(cfg);
-  const pairs = await recomputeAll(cfg);
-  return { reminded, expired, pairs };
+  if (!payload.fanOut) return { reminded, expired, pairs: await recomputeAll(cfg) };
+  const pairs = await repo.agentShapePairs();
+  const shapes = await repo.listShapes();
+  const events = [
+    ...pairs.map(p => ({ body: { type: "recompute-pair", agentId: p.agent_id, shapeId: p.shape_id },
+      concurrency: { key: `rec-${p.agent_id}-${p.shape_id}`.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 100), limit: 1 } })),
+    ...shapes.map(s => ({ body: { type: "recompute-team", shapeId: s.shape_id },
+      concurrency: { key: `team-${s.shape_id}`.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 100), limit: 1 } })),
+  ];
+  const { Queue } = require("@forge/events");
+  const queue = new Queue({ key: "lessel-jobs" });
+  for (let i = 0; i < events.length; i += 50) await queue.push(events.slice(i, i + 50));   // push takes up to 50
+  return { reminded, expired, queued: events.length };
 }
 
 /** Rebuild history from REST (§10.6). Safe to run repeatedly: every write is idempotent. */
@@ -87,6 +102,8 @@ const handlers = {
   backfill,
   hourly,
   "recompute-all": () => recomputeAll(),
+  "recompute-pair": body => recompute(body.agentId, body.shapeId),
+  "recompute-team": body => recomputeTeam(body.shapeId),
   "scan-history": body => scanHistory(body.pageId),
 };
 

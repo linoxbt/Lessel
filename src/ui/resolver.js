@@ -30,15 +30,21 @@ const fmtLevel = d => (d.effective === d.earned ? `L${d.earned}` : `L${d.earned}
 
 async function board() {
   const cfg = await repo.getSettings();
-  const agents = await repo.listAgents();
-  const records = await repo.allRecords();
+  const [agents, records, allHolds] = await Promise.all([repo.listAgents(), repo.allRecords(), repo.allActiveHolds()]);
+  // One query for every hold instead of one per cell (Forge resolvers have a short time limit).
+  const holdsByPair = new Map();
+  for (const h of allHolds) {
+    const k = `${h.agent_id}|${h.shape_id}`;
+    if (!holdsByPair.has(k)) holdsByPair.set(k, []);
+    holdsByPair.get(k).push(h);
+  }
   const shapeIds = [...new Set(records.map(r => r.shape_id))].sort();
   const cells = [];
   for (const agent of agents) {
     for (const shapeId of shapeIds) {
       const rec = records.find(r => r.subject_id === agent.agent_id && r.shape_id === shapeId);
       if (!rec) continue;
-      const holds = await repo.activeHolds(agent.agent_id, shapeId);
+      const holds = holdsByPair.get(`${agent.agent_id}|${shapeId}`) ?? [];
       const d = decideCore({ agent, shape: shapeObj(shapeId, "path", cfg), rec, holds }, cfg);
       cells.push({ agentId: agent.agent_id, shapeId, label: fmtLevel(d), earned: d.earned, effective: d.effective,
         blocked: d.blocked, probation: holds.some(h => h.kind === "probation"), review: holds.some(h => h.kind === "review"),

@@ -12,7 +12,7 @@ const { uiResolver } = require("./ui/resolver");
 
 /** Scheduled trigger: hand the sweep to the queue so it gets the longer async runtime. */
 async function resolveOutcomes() {
-  await jobs.enqueue({ type: "hourly" }, "hourly");
+  await jobs.enqueue({ type: "hourly", fanOut: true }, "hourly");
   return { statusCode: 204 };
 }
 
