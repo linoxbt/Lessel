@@ -9,7 +9,8 @@
   "scripts": {
     "test": "node --test --test-concurrency=1 test/*.test.js",
     "lint": "forge lint",
-    "check:manifest": "node scripts/validate-manifest.js"
+    "check:manifest": "node scripts/validate-manifest.js",
+    "lint:offline": "node scripts/offline-lint.js"
   },
   "engines": {
     "node": ">=22"
@@ -26,6 +27,7 @@
   },
   "devDependencies": {
     "ajv": "^8.20.0",
+    "esbuild": "^0.28.2",
     "mysql2": "^3.24.6",
     "yaml": "^2.9.1"
   }
