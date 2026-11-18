@@ -3,10 +3,11 @@
 // (persona, reasoning effort, whether tests are required).
 
 import * as z from "zod/v4";
-import { execFile } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
-import { readFile, writeFile, mkdir, stat, realpath } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { readFile, writeFile, mkdir, stat, lstat, realpath } from "node:fs/promises";
+import { existsSync, mkdirSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { ChatClient, DEFAULT_LLM } from "./llm.js";
 
@@ -35,18 +36,55 @@ const RULES = [
   "If the ticket can't be done, call finish with a summary that starts with \"Cannot:\" and explains why, without changing files.",
 ].join("\n");
 
-/** Resolve a model-supplied path inside root, rejecting escapes (including through symlinks). */
+/**
+ * Resolve a model-supplied path inside root. Rejects escapes, .git, node_modules (ignored by git, so changes
+ * there would never show in the PR) and any symlink on the way (including dangling ones).
+ */
 export async function confine(root, p) {
-  const target = path.resolve(root, String(p ?? ""));
-  const rel = path.relative(root, target);
-  if (rel === ".." || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) throw new Error("path escapes the repository");
-  if (rel.split(path.sep)[0] === ".git") throw new Error("the .git directory is off limits");
-  let probe = target;
-  while (!existsSync(probe)) probe = path.dirname(probe);
-  const real = await realpath(probe);
   const realRoot = await realpath(root);
-  if (real !== realRoot && !real.startsWith(realRoot + path.sep)) throw new Error("path escapes the repository");
+  const target = path.resolve(realRoot, String(p ?? ""));
+  const rel = path.relative(realRoot, target);
+  if (rel === ".." || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) throw new Error("path escapes the repository");
+  const parts = rel.split(path.sep).filter(Boolean);
+  if (parts[0] === ".git") throw new Error("the .git directory is off limits");
+  if (parts.includes("node_modules")) throw new Error("node_modules is off limits");
+  let cur = realRoot;
+  for (const part of parts) {
+    cur = path.join(cur, part);
+    let st;
+    try { st = await lstat(cur); } catch (e) { if (e.code === "ENOENT") break; throw e; }
+    if (st.isSymbolicLink()) throw new Error("symlinks are off limits");
+  }
   return target;
+}
+
+// ---------- test sandbox ----------
+// Tests run code the model wrote. They run as a separate unprivileged user (when the runner is root, as on
+// Railway) with a minimal environment, so they can't read the runner's env, secrets or token files.
+const SANDBOX_USER = "lessel-sandbox";
+let sandbox;
+export function sandboxIdentity() {
+  if (sandbox !== undefined) return sandbox;
+  sandbox = null;
+  if (typeof process.getuid !== "function" || process.getuid() !== 0) return sandbox;
+  try {
+    try { execFileSync("id", ["-u", SANDBOX_USER], { stdio: "ignore" }); }
+    catch { execFileSync("useradd", ["--system", "--no-create-home", "--shell", "/usr/sbin/nologin", SANDBOX_USER], { stdio: "ignore" }); }
+    const uid = Number(execFileSync("id", ["-u", SANDBOX_USER]).toString().trim());
+    const gid = Number(execFileSync("id", ["-g", SANDBOX_USER]).toString().trim());
+    const home = path.join(os.tmpdir(), SANDBOX_USER);
+    mkdirSync(home, { recursive: true });
+    execFileSync("chown", ["-R", `${uid}:${gid}`, home]);
+    sandbox = { uid, gid, home };
+  } catch (e) {
+    console.warn(`Couldn't set up the test sandbox user: ${e.message}. Tests run with a minimal environment only.`);
+  }
+  return sandbox;
+}
+
+export function sandboxEnv(home) {
+  return { PATH: process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin", HOME: home, CI: "1", LANG: "C.UTF-8",
+    npm_config_cache: path.join(home, ".npm"), npm_config_update_notifier: "false", npm_config_fund: "false" };
 }
 
 /** Tools: name, description, zod schema (validates the model's arguments), run(args) → string. */
@@ -86,15 +124,22 @@ export function makeTools({ root, readPage, result }) {
     },
     {
       name: "run_tests",
-      description: "Install dependencies if needed and run `npm test` for one service (e.g. ledger or checkout). Returns the tail of the output.",
+      description: "Install dependencies (lockfile, no install scripts) and run `npm test` for one service (e.g. ledger or checkout). Returns the tail of the output.",
       schema: z.object({ service: z.string().regex(/^[a-z0-9-]+$/) }),
       run: async ({ service }) => {
         const dir = path.join(root, "services", service);
         if (!existsSync(path.join(dir, "package.json"))) return `No service called ${service}.`;
-        const env = { ...process.env, CI: "1" };
+        const box = sandboxIdentity();
+        const home = box?.home ?? path.join(os.tmpdir(), "lessel-tests-home");
+        mkdirSync(home, { recursive: true });
+        const opts = { cwd: dir, env: sandboxEnv(home), timeout: 300_000, maxBuffer: 10e6,
+          ...(box ? { uid: box.uid, gid: box.gid } : {}) };
         try {
-          if (!existsSync(path.join(dir, "node_modules"))) await run("npm", ["install", "--no-audit", "--no-fund"], { cwd: dir, env, timeout: 300_000 });
-          const { stdout, stderr } = await run("npm", ["test"], { cwd: dir, env, timeout: 300_000, maxBuffer: 10e6 });
+          if (box) await run("chown", ["-R", `${box.uid}:${box.gid}`, root]);
+          const install = existsSync(path.join(dir, "package-lock.json"))
+            ? ["ci", "--ignore-scripts", "--no-audit", "--no-fund"] : ["install", "--ignore-scripts", "--no-audit", "--no-fund"];
+          await run("npm", install, opts);
+          const { stdout, stderr } = await run("npm", ["test"], opts);
           result.testsRun.push({ service, ok: true });
           return `PASS\n${(stdout + stderr).slice(-4000)}`;
         } catch (e) {
@@ -168,7 +213,9 @@ export function clientFor(llm) {
  * Run the agent on one work item inside `root`. Returns { summary, testsRun, stopReason, turns }.
  * client: a ChatClient (or anything with complete(body)); defaults to the agent's configured endpoint.
  */
-export async function runAgent({ agent, inv, root, readPage, client }) {
+export class Cancelled extends Error {}
+
+export async function runAgent({ agent, inv, root, readPage, client, shouldStop = () => false }) {
   client = client ?? clientFor(agent.llm);
   const result = { summary: null, testsRun: [], stopReason: null, turns: 0 };
   const tools = makeTools({ root, readPage, result });
@@ -181,6 +228,7 @@ export async function runAgent({ agent, inv, root, readPage, client }) {
 
   const maxTurns = agent.maxIterations ?? 40;
   while (result.turns < maxTurns) {
+    if (shouldStop()) throw new Cancelled("canceled");
     result.turns++;
     const res = await client.complete({
       messages,
@@ -191,12 +239,14 @@ export async function runAgent({ agent, inv, root, readPage, client }) {
       max_tokens: 16000,
     });
     const choice = res?.choices?.[0];
+    if (!choice?.message) throw new Error("the model endpoint returned no choices");
     const msg = choice?.message ?? {};
     const calls = Array.isArray(msg.tool_calls) ? msg.tool_calls : [];
     messages.push({ role: "assistant", content: msg.content ?? "", ...(calls.length ? { tool_calls: calls } : {}) });
 
     if (!calls.length) { result.stopReason = choice?.finish_reason ?? "stop"; break; }
     for (const call of calls) {
+      if (shouldStop()) throw new Cancelled("canceled");
       const content = await runToolCall(call, byName);
       messages.push({ role: "tool", tool_call_id: call.id, content });
     }

@@ -2,7 +2,7 @@
 // agent's own Atlassian account so Lessel binds the declaration to the caller. OAuth tokens come from
 // `npm run mcp-login -- <agent>` and refresh automatically.
 
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, chmodSync } from "node:fs";
 import { dirname } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -16,8 +16,9 @@ export class FileOAuthProvider {
   }
   load() { try { return JSON.parse(readFileSync(this.file, "utf8")); } catch { return {}; } }
   save(patch) {
-    mkdirSync(dirname(this.file), { recursive: true });
+    mkdirSync(dirname(this.file), { recursive: true, mode: 0o700 });
     writeFileSync(this.file, JSON.stringify({ ...this.load(), ...patch }, null, 2), { mode: 0o600 });
+    chmodSync(this.file, 0o600);   // also tightens files copied in with looser modes
   }
   get redirectUrl() { return this._redirectUrl; }
   get clientMetadata() {

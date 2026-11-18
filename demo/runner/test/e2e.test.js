@@ -92,7 +92,8 @@ test("assignment → declare-context (before PR) → commit with trailer → PR 
     assert.match(task.status.message.parts[0].text, /^Opened PR #42/);
 
     assert.deepEqual(order, [`read ${runbook}`, "declare v7", "pr PAY-201 Add index on entries(account_id)", "comment"]);
-    assert.match(seen.pr.description, /Context read \(declared to Lessel\):\n.*Ledger\+runbook v7/);
+    assert.match(seen.pr.description, /Context read:\n.*Ledger\+runbook v7\n/);
+    assert.doesNotMatch(seen.pr.description, /NOT declared/);
     const first = seen.requests[0];
     assert.equal(first.reasoning_effort, "high");
     assert.equal(first.tool_choice, "auto");
@@ -125,7 +126,7 @@ test("tools refuse paths outside the repo, into .git, or through symlinks", asyn
   await assert.rejects(confine(root, "../x"), /escapes/);
   await assert.rejects(confine(root, "/etc/passwd"), /escapes/);
   await assert.rejects(confine(root, ".git/config"), /off limits/);
-  await assert.rejects(confine(root, "escape/x"), /escapes/);
+  await assert.rejects(confine(root, "escape/x"), /symlinks are off limits/);
   const tools = Object.fromEntries(makeTools({ root, readPage: null, result: { testsRun: [] } }).map(t => [t.name, t]));
   assert.match(await tools.run_tests.run({ service: "nope" }), /No service called nope/);
 });

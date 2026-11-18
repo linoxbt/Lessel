@@ -57,6 +57,24 @@ For the Bitbucket pipeline to deploy agent commits to this staging service:
    - `STAGING_URL=https://ledger-staging-production-1c72d760.up.railway.app`
    - the Jira variables for incidents.
 
+## Security model of the runner
+
+- **Requests:** every A2A request must carry a valid Forge Invocation Token for the Demo Agents app. With
+  `A2A_SKIP_FIT=1` (local testing only), the runner listens on 127.0.0.1 only.
+- **Task isolation:** each agent can only read or cancel its own tasks. A repeated assignment reuses the running
+  task.
+- **Git credentials:** passed through git's environment config as an auth header scoped to bitbucket.org. They
+  never appear in the remote URL, in command arguments, or in errors returned to Jira.
+- **File tools:** confined to the checkout. They refuse `..`, absolute paths, `.git`, `node_modules` and any
+  symlink.
+- **Tests:** `run_tests` installs with `--ignore-scripts`, then runs `npm test`. When the runner runs as root
+  (as on Railway), this happens as an unprivileged `lessel-sandbox` user with a minimal environment, so test code
+  can't read the runner's environment, the token files in `/data/secrets` or other agents' credentials. Tests
+  can still reach the network; isolating that needs a container per run.
+- **Declarations:** if a context declaration to Lessel fails, the PR isn't opened. The task fails with the
+  reason, so an undeclared read can't slip through.
+- **Restarts:** tasks in flight when the runner restarts are reported as failed rather than left WORKING.
+
 ## Accounts you need
 
 | Account | Used for |

@@ -41,16 +41,29 @@ export class Bitbucket {
   constructor({ workspace, slug, email, token, fetchFn = fetch, apiBase = "https://api.bitbucket.org/2.0" }) {
     Object.assign(this, { workspace, slug, email, token, fetchFn, apiBase });
   }
+  /** Plain clone URL; credentials go in gitAuthHeader(), never in the URL. */
   cloneUrl() {
-    return `https://x-bitbucket-api-token-auth:${encodeURIComponent(this.token)}@bitbucket.org/${this.workspace}/${this.slug}.git`;
+    return `https://bitbucket.org/${this.workspace}/${this.slug}.git`;
   }
+  gitAuthHeader() {
+    return `Authorization: ${basic("x-bitbucket-api-token-auth", this.token)}`;
+  }
+  /** Open a PR; if one is already open for the branch (re-assignment), return that one instead. */
   async openPullRequest({ branch, destination, title, description }) {
-    const res = await this.fetchFn(`${this.apiBase}/repositories/${this.workspace}/${this.slug}/pullrequests`, {
+    const base = `${this.apiBase}/repositories/${this.workspace}/${this.slug}/pullrequests`;
+    const headers = { authorization: basic(this.email, this.token), accept: "application/json" };
+    const res = await this.fetchFn(base, {
       method: "POST",
-      headers: { authorization: basic(this.email, this.token), "content-type": "application/json", accept: "application/json" },
+      headers: { ...headers, "content-type": "application/json" },
       body: JSON.stringify({ title, description, close_source_branch: true,
         source: { branch: { name: branch } }, destination: { branch: { name: destination } } }),
     });
+    if (res.status === 400 || res.status === 409) {
+      const q = encodeURIComponent(`source.branch.name="${branch}" AND state="OPEN"`);
+      const existing = await json(await this.fetchFn(`${base}?q=${q}`, { headers }), "Bitbucket PR lookup");
+      const pr = existing?.values?.[0];
+      if (pr) return { id: pr.id, url: pr.links?.html?.href ?? null, existing: true };
+    }
     const pr = await json(res, "Bitbucket PR");
     return { id: pr.id, url: pr.links?.html?.href ?? null };
   }

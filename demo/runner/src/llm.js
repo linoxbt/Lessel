@@ -59,12 +59,15 @@ export class ChatClient {
       clearTimeout(timer);
       let json = null;
       try { json = text ? JSON.parse(text) : null; } catch { /* non-JSON error page */ }
-      if (res.ok) return json;
+      if (res.ok) {
+        if (!json) throw new LlmError(res.status, "empty_response", "the endpoint returned an empty body");
+        return json;
+      }
       const code = json?.error?.code ?? null;
       const message = json?.error?.message ?? text?.slice(0, 300) ?? res.statusText;
       if (isRetryable(res.status, code) && attempt++ < this.maxRetries) {
         const after = Number(res.headers.get("retry-after"));
-        await this.sleepFn(Number.isFinite(after) && after > 0 ? after * 1000 : 1000 * 2 ** attempt);
+        await this.sleepFn(Math.min(300_000, Number.isFinite(after) && after > 0 ? after * 1000 : 1000 * 2 ** attempt));
         continue;
       }
       throw new LlmError(res.status, code, message, json?.request_id);

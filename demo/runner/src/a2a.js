@@ -93,11 +93,11 @@ export async function handleRpc(body, deps) {
   }
 }
 
-async function sendMessage(params, { store, start }) {
+async function sendMessage(params, { store, start, agentId = null }) {
   const message = params?.message;
   if (!message || !Array.isArray(message.parts)) throw new RpcError(ERR.INVALID_PARAMS, "params.message.parts is required");
   const inv = readInvocation(message);
-  const task = { id: randomUUID(), contextId: message.contextId ?? randomUUID() };
+  const task = { id: randomUUID(), contextId: message.contextId ?? randomUUID(), agentId };
 
   if (inv.kind === "chat") {
     // Chat isn't how these agents take work; answer and finish.
@@ -107,6 +107,8 @@ async function sendMessage(params, { store, start }) {
     return task;
   }
   if (!inv.issueKey) throw new RpcError(ERR.INVALID_PARAMS, "The data part has no issue key");
+  const active = store.findActive?.(agentId, inv.issueKey);
+  if (active) return active;                 // already queued or running: don't do the same work twice
   setState(task, STATE.WORKING, `Picked up ${inv.issueKey}.`);
   task.metadata = { issueKey: inv.issueKey, invocationType: inv.invocationType };
   store.put(task);
@@ -114,14 +116,19 @@ async function sendMessage(params, { store, start }) {
   return task;
 }
 
-function getTask(params, { store }) {
-  const task = params?.id ? store.get(params.id) : null;
+const ownTask = (store, id, agentId) => {
+  const task = id ? store.get(id) : null;
+  return task && (agentId == null || task.agentId == null || task.agentId === agentId) ? task : null;
+};
+
+function getTask(params, { store, agentId = null }) {
+  const task = ownTask(store, params?.id, agentId);
   if (!task) throw new RpcError(ERR.TASK_NOT_FOUND, "Task not found");
   return task;
 }
 
-function cancelTask(params, { store }) {
-  const task = params?.id ? store.get(params.id) : null;
+function cancelTask(params, { store, agentId = null }) {
+  const task = ownTask(store, params?.id, agentId);
   if (!task) throw new RpcError(ERR.TASK_NOT_FOUND, "Task not found");
   if (TERMINAL.has(task.status.state)) throw new RpcError(ERR.TASK_NOT_CANCELABLE, "Task is already finished");
   task.cancelRequested = true;

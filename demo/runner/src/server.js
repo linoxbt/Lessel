@@ -11,6 +11,8 @@ import { Lessel } from "./lessel.js";
 import { runAgent } from "./agent.js";
 import { workOn, SerialQueue } from "./work.js";
 
+const MAX_BODY = 1024 * 1024;
+
 export function createServer(cfg, overrides = {}) {
   const store = overrides.store ?? new TaskStore(cfg.taskFile);
   // Without an app id the runner stays up (health checks pass) but refuses every A2A request.
@@ -25,7 +27,8 @@ export function createServer(cfg, overrides = {}) {
   const depsFor = overrides.depsFor ?? ((agent, fit, systemToken) => {
     const bitbucket = new Bitbucket({ workspace: cfg.repo.workspace, slug: cfg.repo.slug, ...agent.bitbucket });
     return {
-      git: new Git({ dir: agent.workdir, remoteUrl: bitbucket.cloneUrl(), mainBranch: cfg.repo.mainBranch, ...agent.git }),
+      git: new Git({ dir: agent.workdir, remoteUrl: bitbucket.cloneUrl(), authHeader: bitbucket.gitAuthHeader(),
+        mainBranch: cfg.repo.mainBranch, ...agent.git }),
       bitbucket,
       confluence: new Confluence({ baseUrl: cfg.siteUrl, ...agent.confluence }),
       lessel: new Lessel({ url: cfg.lesselMcpUrl, tokenFile: agent.mcpTokenFile }),
@@ -50,7 +53,12 @@ export function createServer(cfg, overrides = {}) {
     let body;
     try {
       const chunks = [];
-      for await (const c of req) chunks.push(c);
+      let size = 0;
+      for await (const c of req) {
+        size += c.length;
+        if (size > MAX_BODY) return send(413, { error: "request too large" });
+        chunks.push(c);
+      }
       body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
     } catch {
       return send(200, rpcError(null, ERR.PARSE, "Parse error"));
@@ -59,6 +67,7 @@ export function createServer(cfg, overrides = {}) {
     const systemToken = req.headers["x-forge-oauth-system"] ?? null;
     const response = await handleRpc(body, {
       store,
+      agentId: agent.id,
       start: (task, inv) => {
         if (inv.agentAccountId && inv.agentAccountId !== "UNKNOWN") {
           console.log(`${agent.name}'s Jira account is ${inv.agentAccountId} (map it in Lessel settings).`);
@@ -74,6 +83,8 @@ export function createServer(cfg, overrides = {}) {
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const cfg = loadConfig();
-  createServer(cfg).listen(cfg.port, () =>
+  // Skipping token checks is for local testing: then the runner only listens on localhost.
+  const host = cfg.skipFit ? "127.0.0.1" : undefined;
+  createServer(cfg).listen(cfg.port, host, () =>
     console.log(`Lessel demo runner on :${cfg.port} — ${Object.values(cfg.agents).map(a => `${a.name} at ${a.route}`).join(", ")}`));
 }
