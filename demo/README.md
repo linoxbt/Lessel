@@ -7,14 +7,14 @@ repo root; nothing here is part of the product.
 |---|---|
 | `ledger-service/` | The repo the agents work in. Push it to its own Bitbucket repository. |
 | `agents-app/` | **Lessel Demo Agents**, a separate Forge app with two agent connectors, Atlas and Brook. |
-| `runner/` | The A2A runner both connectors call. It does the coding with Claude and opens PRs. |
+| `runner/` | The A2A runner both connectors call. It does the coding with Qwen (via Fortytwo) and opens PRs. |
 
 ## How one ticket flows
 
 1. You assign a PAY ticket to Atlas or Brook in Jira.
 2. Jira sends an A2A `SendMessage` to the runner (`/a2a/atlas` or `/a2a/brook`). The runner verifies the Forge
    Invocation Token and answers at once with a `TASK_STATE_WORKING` task. Jira then polls `GetTask`.
-3. The runner checks out a `PAY-123-…` branch and runs Claude (`claude-opus-5-5`) with six tools: list, read
+3. The runner checks out a `PAY-123-…` branch and runs Qwen (`qwen/qwen3.8-27b` on Fortytwo) with six tools: list, read
    and write files, run a service's tests, read a Confluence page, and finish.
 4. Every Confluence page the agent reads is declared to Lessel's `declare-context` MCP tool with its version,
    **before** the PR exists. That's what lets Clean Room excuse a failure later.
@@ -24,8 +24,10 @@ repo root; nothing here is part of the product.
 
 Atlas and Brook share code but not setup. **Brook** reads linked pages first, must run tests before finishing,
 and runs at effort `high`. **Atlas** makes the smallest change, tests are optional, and it runs at effort `low`.
-Both use Claude Opus 5.5. A refusal falls back to another model server-side (`fallbacks: "default"`) rather
-than failing the ticket.
+Both use Qwen3.8-27B through Fortytwo's OpenAI-compatible API (`https://api.fortytwo.network/v1`), with
+`reasoning_effort` `high` for Brook and `low` for Atlas. Rate-limit and capacity errors are retried, honouring
+`Retry-After`; quota and auth errors fail the task with the reason. Any OpenAI-compatible endpoint works: set
+`llm` (`baseUrl`, `model`, `apiKeyEnv`) in the config, globally or per agent.
 
 ## Already hosted (Railway project `lessel-demo`)
 
@@ -37,7 +39,7 @@ than failing the ticket.
 Both services deploy from `main` of the GitHub repo, and each one redeploys only when its own folder changes.
 To finish the runner, set these in Railway (service `agent-runner` → Variables):
 - `FORGE_APP_ID`
-- `ANTHROPIC_API_KEY`
+- `FORTYTWO_API_KEY` (from platform.fortytwo.network: buy credits, then create a key starting `sk-ft-v1-`)
 - `BROOK_BITBUCKET_TOKEN`
 - `ATLAS_BITBUCKET_TOKEN`
 - `BROOK_ATLASSIAN_TOKEN`
@@ -103,7 +105,7 @@ tunnel such as `cloudflared tunnel --url http://localhost:8787`).
 cd demo/runner
 npm install
 cp agents.example.json agents.json      # fill in site, workspace, emails, Lessel MCP URL
-export ANTHROPIC_API_KEY=...            # or an `ant auth login` profile
+export FORTYTWO_API_KEY=sk-ft-v1-...    # Qwen via Fortytwo (or set llm.* for another endpoint)
 export BROOK_BITBUCKET_TOKEN=... ATLAS_BITBUCKET_TOKEN=... BROOK_ATLASSIAN_TOKEN=... ATLAS_ATLASSIAN_TOKEN=...
 export FORGE_APP_ID=<Demo Agents app id, after step 3>
 npm run mcp-login -- brook              # sign in as Brook's service account; repeat for atlas

@@ -44,7 +44,7 @@ production. We wanted agents to earn autonomy the way a new engineer does.
 | Forge platform | Forge SQL, Forge LLMs (change-class fallback), async events queue, scheduled trigger. No remotes, no egress |
 
 Our test agents live in a **separate** Forge app with two `rovo:agentConnector` modules (Atlas and Brook),
-backed by an A2A 1.0 runner that codes with Claude. Lessel itself has no remotes. It works with anyone's agents.
+backed by an A2A 1.0 runner that codes with Qwen (Qwen3.8-27B via Fortytwo). Lessel itself has no remotes. It works with anyone's agents.
 
 **Engineering choices we're proud of:**
 - One `decide()` function behind every surface.

@@ -28,29 +28,31 @@ function bareRepo() {
   return { base, bare };
 }
 
-/** Fake Anthropic client: runs a scripted sequence of tool calls through the runner's real tools. */
+/** Fake OpenAI-compatible client: one scripted tool call per turn, then a plain reply. */
 function scriptedClient(script, seen) {
-  return { beta: { messages: { toolRunner(params) {
-    seen.params = params;
-    return { async runUntilDone() {
-      const byName = Object.fromEntries(params.tools.map(t => [t.name, t]));
-      for (const [name, input] of script) seen.results.push(await byName[name].run(input));
-      return { stop_reason: "end_turn", content: [{ type: "text", text: "Done." }] };
-    } };
-  } } } };
+  let i = 0;
+  return { async complete(body) {
+    seen.requests.push(structuredClone(body));
+    if (i > 0) seen.results.push(body.messages.at(-1).content);   // tool result of the previous call
+    const step = script[i++];
+    if (!step) return { choices: [{ finish_reason: "stop", message: { role: "assistant", content: "Done." } }] };
+    const [name, input] = step;
+    return { choices: [{ finish_reason: "tool_calls", message: { role: "assistant", content: null,
+      tool_calls: [{ id: `call_${i}`, type: "function", function: { name, arguments: JSON.stringify(input) } }] } }] };
+  } };
 }
 
 test("assignment → declare-context (before PR) → commit with trailer → PR → Jira comment → COMPLETED", async () => {
   const { base, bare } = bareRepo();
   const order = [];
-  const seen = { results: [] };
+  const seen = { results: [], requests: [] };
   const runbook = "https://site.atlassian.net/wiki/spaces/ENG/pages/9001/Ledger+runbook";
   const script = [
     ["read_page", { url: runbook }],
     ["write_file", { path: "services/ledger/migrations/0003_entries_account_idx.sql", content: "CREATE INDEX IF NOT EXISTS entries_account_idx ON entries(account_id);\n" }],
     ["finish", { summary: "Add index on entries(account_id)" }],
   ];
-  const agent = { id: "brook", name: "Brook", route: "/a2a/brook", persona: "careful", model: "claude-opus-5-5", effort: "high",
+  const agent = { id: "brook", name: "Brook", route: "/a2a/brook", persona: "careful", effort: "high",
     git: { authorName: "Brook (agent)", authorEmail: "brook@agents.invalid" }, workdir: path.join(base, "work") };
   const cfg = { agents: { brook: agent }, repo: { mainBranch: "main" } };
   const store = new TaskStore();
@@ -91,9 +93,19 @@ test("assignment → declare-context (before PR) → commit with trailer → PR 
 
     assert.deepEqual(order, [`read ${runbook}`, "declare v7", "pr PAY-201 Add index on entries(account_id)", "comment"]);
     assert.match(seen.pr.description, /Context read \(declared to Lessel\):\n.*Ledger\+runbook v7/);
-    assert.equal(seen.params.model, "claude-opus-5-5");
-    assert.equal(seen.params.output_config.effort, "high");
-    assert.equal(seen.params.fallbacks, "default");
+    const first = seen.requests[0];
+    assert.equal(first.reasoning_effort, "high");
+    assert.equal(first.tool_choice, "auto");
+    assert.deepEqual(first.tools.map(t => t.function.name), ["list_files", "read_file", "write_file", "run_tests", "read_page", "finish"]);
+    assert.equal(first.tools[2].function.parameters.required.join(","), "path,content");
+    assert.equal(first.messages[0].role, "system");
+    assert.match(first.messages[1].content, /^Jira work item PAY-201: Add index on entries/);
+    // tool results flow back as role "tool" messages tied to the call id
+    const toolMsg = seen.requests[1].messages.at(-1);
+    assert.equal(toolMsg.role, "tool");
+    assert.equal(toolMsg.tool_call_id, "call_1");
+    assert.match(toolMsg.content, /^Ledger runbook \(version 7\)/);
+    assert.equal(seen.requests.length, 3, "finish ends the loop without another model call");
 
     const branch = "PAY-201-add-index-on-entries";
     const log = sh(bare, "log", "-1", "--format=%an%n%B", branch);

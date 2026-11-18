@@ -3,6 +3,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { DEFAULT_LLM } from "./llm.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(here, "..");
@@ -19,7 +20,7 @@ export function loadConfig(file = process.env.RUNNER_CONFIG ?? path.join(ROOT, "
       name: a.name ?? id,
       route: a.route ?? `/a2a/${id}`,
       persona: a.persona ?? "careful",
-      model: a.model ?? "claude-opus-5-5",
+      llm: { ...DEFAULT_LLM, ...(raw.llm ?? {}), ...(a.llm ?? {}) },   // Qwen on Fortytwo unless overridden
       effort: a.effort ?? "high",
       maxIterations: a.maxIterations ?? 40,
       git: { authorName: a.gitAuthorName ?? `${a.name ?? id} (agent)`, authorEmail: a.gitAuthorEmail ?? `${id}@agents.invalid` },
