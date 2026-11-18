@@ -35,6 +35,12 @@ modules:
         - avi:confluence:updated:page
         - avi:confluence:created:comment
 
+    - key: lifecycle
+      function: onLifecycle
+      events:
+        - avi:forge:installed:app
+        - avi:forge:upgraded:app
+
   scheduledTrigger:
     - key: outcome-resolver
       function: resolveOutcomes
@@ -221,6 +227,8 @@ modules:
       handler: index.onConfluenceEvent
     - key: resolveOutcomes
       handler: index.resolveOutcomes
+    - key: onLifecycle
+      handler: index.onLifecycle
     - key: jobs
       handler: index.jobs
     - key: mergeGate

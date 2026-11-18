@@ -1,0 +1,157 @@
+"use strict";
+// Schema (spec v1.2 §7). Migration 1 in full. Only ever append new migrations; never edit or drop.
+
+const MIGRATIONS = [
+  ["v001_settings", `CREATE TABLE IF NOT EXISTS settings (
+    setting_key VARCHAR(64) PRIMARY KEY,
+    value_json  VARCHAR(4096) NOT NULL,
+    updated_at  TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3))`],
+  ["v001_agents", `CREATE TABLE IF NOT EXISTS agents (
+    agent_id      VARCHAR(64) PRIMARY KEY,
+    display_name  VARCHAR(128) NOT NULL,
+    kind          VARCHAR(16) NOT NULL,
+    trailer_value VARCHAR(64),
+    suspended     TINYINT NOT NULL DEFAULT 0,
+    created_at    TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3))`],
+  ["v001_agent_accounts", `CREATE TABLE IF NOT EXISTS agent_accounts (
+    product    VARCHAR(12) NOT NULL,
+    account_id VARCHAR(128) NOT NULL,
+    agent_id   VARCHAR(64) NOT NULL,
+    added_at   TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
+    PRIMARY KEY (product, account_id))`],
+  ["v001_shapes", `CREATE TABLE IF NOT EXISTS shapes (
+    shape_id     VARCHAR(128) PRIMARY KEY,
+    service      VARCHAR(64) NOT NULL,
+    change_class VARCHAR(32) NOT NULL,
+    critical     TINYINT NOT NULL DEFAULT 0)`],
+  ["v001_work_items", `CREATE TABLE IF NOT EXISTS work_items (
+    issue_key            VARCHAR(32) PRIMARY KEY,
+    actor_kind           VARCHAR(8) NOT NULL,
+    assigned_agent_id    VARCHAR(64),
+    agent_id             VARCHAR(64),
+    repo_uuid            VARCHAR(64),
+    shape_id             VARCHAR(128) NOT NULL,
+    shape_state          VARCHAR(12) NOT NULL,
+    classified_by        VARCHAR(8) NOT NULL,
+    size_lines           INT,
+    assigned_at          TIMESTAMP(3) NOT NULL,
+    merged_at            TIMESTAMP(3) NULL,
+    deployed_at          TIMESTAMP(3) NULL,
+    window_ends          TIMESTAMP(3) NULL,
+    outcome              VARCHAR(12) NOT NULL DEFAULT 'pending',
+    changed_after_window TINYINT NOT NULL DEFAULT 0,
+    updated_at           TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3))`],
+  ["v001_work_items_idx", `CREATE INDEX idx_work_items_agent_shape ON work_items (agent_id, shape_id)`],
+  ["v001_prs", `CREATE TABLE IF NOT EXISTS prs (
+    repo_uuid     VARCHAR(64) NOT NULL,
+    pr_id         INT NOT NULL,
+    workspace_uuid VARCHAR(64),
+    issue_key     VARCHAR(32) NOT NULL,
+    agent_id      VARCHAR(64),
+    state         VARCHAR(12) NOT NULL,
+    head_commit   VARCHAR(64),
+    merge_commit  VARCHAR(64),
+    shape_id      VARCHAR(128),
+    shape_head    VARCHAR(64),
+    classified_by VARCHAR(8),
+    updated_at    TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
+    PRIMARY KEY (repo_uuid, pr_id))`],
+  ["v001_prs_idx", `CREATE INDEX idx_prs_issue ON prs (issue_key)`],
+  ["v001_pr_commits", `CREATE TABLE IF NOT EXISTS pr_commits (
+    repo_uuid VARCHAR(64) NOT NULL,
+    pr_id     INT NOT NULL,
+    sha       VARCHAR(64) NOT NULL,
+    PRIMARY KEY (repo_uuid, sha, pr_id))`],
+  ["v001_events_seen", `CREATE TABLE IF NOT EXISTS events_seen (
+    event_key VARCHAR(255) PRIMARY KEY,
+    seen_at   TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3))`],
+  ["v001_signals", `CREATE TABLE IF NOT EXISTS signals (
+    signal_id     VARCHAR(255) PRIMARY KEY,
+    issue_key     VARCHAR(32) NOT NULL,
+    kind          VARCHAR(12) NOT NULL,
+    ref           VARCHAR(255),
+    severity      TINYINT,
+    causality     VARCHAR(12) NOT NULL,
+    confirmed_via VARCHAR(64),
+    decided_by    VARCHAR(128),
+    decided_at    TIMESTAMP(3) NULL,
+    rev           INT NOT NULL DEFAULT 0,
+    observed_at   TIMESTAMP(3) NOT NULL,
+    updated_at    TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3))`],
+  ["v001_signals_idx", `CREATE INDEX idx_signals_issue ON signals (issue_key)`],
+  ["v001_records", `CREATE TABLE IF NOT EXISTS records (
+    subject_id   VARCHAR(64) NOT NULL,
+    shape_id     VARCHAR(128) NOT NULL,
+    clean        INT NOT NULL,
+    total        INT NOT NULL,
+    lower90      DOUBLE NOT NULL,
+    earned_level TINYINT NULL,
+    contributors INT NULL,
+    watermark    TIMESTAMP(3) NOT NULL,
+    computed_at  TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
+    PRIMARY KEY (subject_id, shape_id))`],
+  ["v001_holds", `CREATE TABLE IF NOT EXISTS holds (
+    hold_id         VARCHAR(255) PRIMARY KEY,
+    agent_id        VARCHAR(64) NOT NULL,
+    shape_id        VARCHAR(128) NOT NULL,
+    kind            VARCHAR(12) NOT NULL,
+    cause_signal_id VARCHAR(255) NOT NULL,
+    cause_ref       VARCHAR(255),
+    reason          VARCHAR(512) NOT NULL,
+    clean_needed    TINYINT,
+    created_at      TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
+    cleared_at      TIMESTAMP(3) NULL)`],
+  ["v001_decision_events", `CREATE TABLE IF NOT EXISTS decision_events (
+    event_id    VARCHAR(255) PRIMARY KEY,
+    agent_id    VARCHAR(64) NOT NULL,
+    shape_id    VARCHAR(128) NOT NULL,
+    before_json VARCHAR(1024) NOT NULL,
+    after_json  VARCHAR(1024) NOT NULL,
+    cause       VARCHAR(512) NOT NULL,
+    at          TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3))`],
+  ["v001_staff_actions", `CREATE TABLE IF NOT EXISTS staff_actions (
+    action_id VARCHAR(255) PRIMARY KEY,
+    actor     VARCHAR(128) NOT NULL,
+    action    VARCHAR(32) NOT NULL,
+    target    VARCHAR(255) NOT NULL,
+    note      VARCHAR(512),
+    at        TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3))`],
+  ["v001_sources", `CREATE TABLE IF NOT EXISTS sources (
+    source_id            VARCHAR(128) PRIMARY KEY,
+    url                  VARCHAR(512) NOT NULL,
+    title                VARCHAR(256),
+    state                VARCHAR(12) NOT NULL DEFAULT 'unscanned',
+    rationale            VARCHAR(1024),
+    tainted_from_version INT,
+    clean_from_version   INT,
+    confirmed_by         VARCHAR(128),
+    confirmed_at         TIMESTAMP(3) NULL)`],
+  ["v001_scan_findings", `CREATE TABLE IF NOT EXISTS scan_findings (
+    finding_id VARCHAR(255) PRIMARY KEY,
+    source_id  VARCHAR(128) NOT NULL,
+    version    INT NOT NULL,
+    filter     VARCHAR(32) NOT NULL,
+    quote      VARCHAR(1024) NOT NULL,
+    found_at   TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3))`],
+  ["v001_context_reads", `CREATE TABLE IF NOT EXISTS context_reads (
+    read_id        VARCHAR(64) PRIMARY KEY,
+    issue_key      VARCHAR(32) NOT NULL,
+    agent_id       VARCHAR(64) NOT NULL,
+    source_id      VARCHAR(128) NOT NULL,
+    source_version INT,
+    version_basis  VARCHAR(10) NOT NULL,
+    method         VARCHAR(10) NOT NULL,
+    flag           VARCHAR(32) NULL,
+    read_at        TIMESTAMP(3) NOT NULL,
+    recorded_at    TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3))`],
+  ["v001_context_reads_idx", `CREATE INDEX idx_reads_issue ON context_reads (issue_key)`],
+];
+
+/** Forge: run through @forge/sql's migrationRunner, which records what's been applied. */
+async function migrateForge() {
+  const { migrationRunner } = require("@forge/sql");
+  for (const [name, ddl] of MIGRATIONS) migrationRunner.enqueue(name, ddl);
+  return migrationRunner.run();
+}
+
+module.exports = { MIGRATIONS, migrateForge };
