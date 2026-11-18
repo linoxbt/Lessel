@@ -37,6 +37,7 @@ jobs:
         run: |
           npm run check:manifest
           node scripts/validate-manifest.js demo/agents-app
+          node scripts/validate-manifest.js bitbucket-app
       - name: Tests (unit + end-to-end against MariaDB)
         run: npm test
       - name: UI Kit screens bundle
@@ -46,6 +47,7 @@ jobs:
           npm i -g @forge/cli
           npm run lint:offline
           node scripts/offline-lint.js demo/agents-app
+          node scripts/offline-lint.js bitbucket-app
 
   runner:
     name: Demo runner (A2A + Qwen agent)
