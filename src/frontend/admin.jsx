@@ -78,6 +78,30 @@ function Agents({ view, act }) {
   );
 }
 
+const STATUS = { ok: "success", warn: "moved", fail: "removed", manual: "new", info: "default" };
+
+function SetupCheck() {
+  const [rows, setRows] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const run = async () => { setBusy(true); setRows(await invoke("getReadiness")); setBusy(false); };
+  return (
+    <Stack space="space.100">
+      <Button onClick={run} isDisabled={busy}>{busy ? "Checking…" : "Run setup check"}</Button>
+      {rows?.error ? <ErrorMessage error={rows.error} /> : null}
+      {Array.isArray(rows) ? (
+        <DynamicTable
+          head={{ cells: [{ key: "s", content: "Status" }, { key: "t", content: "Check" }, { key: "d", content: "Detail" }] }}
+          rows={rows.map(r => ({ key: r.id, cells: [
+            { key: "s", content: <Lozenge appearance={STATUS[r.status]}>{r.status}</Lozenge> },
+            { key: "t", content: r.title },
+            { key: "d", content: r.detail },
+          ] }))}
+        />
+      ) : null}
+    </Stack>
+  );
+}
+
 function Snapshot() {
   const [out, setOut] = useState("");
   const [paste, setPaste] = useState("");
@@ -124,6 +148,8 @@ function App() {
           Switch to {s.enforcementMode === "enforcing" ? "advisory" : "enforcing"}
         </Button>
       </Inline>
+      <Heading as="h3">Setup check</Heading>
+      <SetupCheck />
       <Heading as="h3">Agents</Heading>
       <Agents view={view} act={act} />
       <Heading as="h3">Jobs</Heading>

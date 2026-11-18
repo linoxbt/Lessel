@@ -13,6 +13,7 @@ const signals = require("../services/signals");
 const cleanroom = require("../services/cleanroom");
 const graph = require("../services/graph");
 const snapshot = require("../services/snapshot");
+const { readiness } = require("../services/readiness");
 
 class Forbidden extends Error {}
 
@@ -206,6 +207,7 @@ const DEFINITIONS = {
     before: safeJson(e.before_json), after: safeJson(e.after_json) })),
   dismissTaint: async ({ payload, context }) => { await requireAdmin(); await cleanroom.dismissTaint(payload.sourceId, context.accountId); return sources(); },
   scanHistory: async ({ payload }) => { await requireAdmin(); return require("../jobs").enqueue({ type: "scan-history", pageId: payload.pageId }); },
+  getReadiness: async () => { await requireAdmin(); return readiness(); },
   exportSnapshot: async () => { await requireAdmin(); return { json: JSON.stringify(await snapshot.exportSnapshot()) }; },
   importSnapshot: async ({ payload }) => {
     await requireAdmin();

@@ -495,3 +495,35 @@ test("P4: quarantine and lift; one reminder before a suspected cause expires; pa
   const brookView = await ui.panel({ issueKey: "PAY-615" });
   assert.equal(brookView.recommendation, null, "merged items and qualified agents get no hint");
 });
+
+test("Setup check reports config and live Jira state in plain sentences", async (t) => {
+  if (!pool) return t.skip("no test database");
+  const { readiness } = require("../src/services/readiness");
+  delete process.env.FORTYTWO_API_KEY;
+  let r = Object.fromEntries((await readiness()).map(x => [x.id, x]));
+  assert.equal(r["agent:brook"].status, "ok");
+  assert.equal(r.projectKeys.status, "ok");
+  assert.equal(r.incidentProjects.status, "ok");
+  assert.equal(r.linkType.status, "ok");
+  assert.equal(r.severity.status, "ok");
+  assert.equal(r.ai.status, "warn");
+  assert.match(r.ai.detail, /FORTYTWO_API_KEY isn't set/);
+  assert.equal(r.graph.status, "warn");
+  assert.equal(r.bitbucket.status, "manual");
+  assert.match(r.window.detail, /^3 days \(labelled on screen/);
+
+  // Break things: a missing incident project, an unknown link type, a missing field, an agent without accounts.
+  await repo.setSetting("incidentProjects", ["INC", "OPS"]);
+  await repo.setSetting("causedByLinkType", "Caused");
+  await repo.setSetting("severity", { field: "customfield_99999", map: {}, missing: 3 });
+  await repo.upsertAgent({ agent_id: "nova", display_name: "Nova" });
+  process.env.FORTYTWO_API_KEY = "sk-ft-v1-x";
+  r = Object.fromEntries((await readiness()).map(x => [x.id, x]));
+  assert.deepEqual([r.incidentProjects.status, r.incidentProjects.detail], ["fail", "Not found on this site: OPS."]);
+  assert.equal(r.linkType.status, "fail");
+  assert.match(r.linkType.detail, /Set causedByLinkType to one of: Problem\/Incident, Relates\./);
+  assert.equal(r.severity.status, "fail");
+  assert.equal(r["agent:nova"].status, "fail");
+  assert.equal(r.ai.status, "ok");
+  delete process.env.FORTYTWO_API_KEY;
+});

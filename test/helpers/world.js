@@ -72,6 +72,9 @@ function makeWorld() {
     async searchJql() { return []; },
     async userHas() { return true; },
     async addComment(key, text) { jiraComments.push({ key, text }); return {}; },
+    async getProject(key) { return ["PAY", "INC"].includes(key) ? { key } : null; },
+    async listLinkTypes() { return [{ name: "Problem/Incident", inward: "is caused by", outward: "causes" }, { name: "Relates" }]; },
+    async listFields() { return [{ id: "priority" }, { id: "customfield_10050", name: "Severity" }]; },
   };
   const confluence = {
     async getPage(id, version) {

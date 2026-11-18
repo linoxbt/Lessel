@@ -21,6 +21,19 @@ async function getStatus(id) {
   return asAppGet(route`/rest/api/3/status/${id}`);
 }
 
+async function listLinkTypes() {
+  const { route } = api();
+  return (await asAppGet(route`/rest/api/3/issueLinkType`))?.issueLinkTypes ?? [];
+}
+async function getProject(key) {
+  const { route } = api();
+  try { return await asAppGet(route`/rest/api/3/project/${key}`); } catch (e) { if (e.status === 404) return null; throw e; }
+}
+async function listFields() {
+  const { route } = api();
+  return (await asAppGet(route`/rest/api/3/field`)) ?? [];
+}
+
 async function getIssueLink(linkId) {
   const { route } = api();
   return asAppGet(route`/rest/api/3/issueLink/${linkId}`);
@@ -72,4 +85,4 @@ function adfText(node) {
   return (node.content || []).map(adfText).join(node.type === "paragraph" ? "\n" : "");
 }
 
-module.exports = { getIssue, getStatus, getIssueLink, searchJql, addComment, userHas, adfText };
+module.exports = { getIssue, getStatus, listLinkTypes, getProject, listFields, getIssueLink, searchJql, addComment, userHas, adfText };
