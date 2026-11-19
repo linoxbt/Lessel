@@ -10,6 +10,7 @@ import { Bitbucket, Confluence, commentOnIssue } from "./atlassian.js";
 import { Lessel, LesselBridge } from "./lessel.js";
 import { runAgent } from "./agent.js";
 import { workOn, SerialQueue } from "./work.js";
+import { startPolling, commentAsAgent } from "./poller.js";
 
 const MAX_BODY = 1024 * 1024;
 
@@ -41,7 +42,23 @@ export function createServer(cfg, overrides = {}) {
     };
   });
 
-  return http.createServer(async (req, res) => {
+  const enqueue = (agent, task, inv, deps) => {
+    if (!queues.has(agent.id)) queues.set(agent.id, new SerialQueue());
+    queues.get(agent.id).push(() => workOn(task, inv, agent, { ...deps, store }));
+  };
+
+  // Jira assignments to the agents' own accounts (when AI agent connectors aren't available on the site).
+  if (overrides.poll ?? process.env.RUNNER_POLL === "1") {
+    startPolling({ cfg, store, intervalMs: Number(process.env.RUNNER_POLL_SECONDS ?? 60) * 1000,
+      startWork: (agent, task, inv) => {
+        const deps = depsFor(agent, { issueKey: inv.issueKey }, null);
+        deps.comment = text => commentAsAgent({ siteUrl: cfg.siteUrl, ...agent.confluence, issueKey: inv.issueKey, text });
+        enqueue(agent, task, inv, deps);
+      } });
+    console.log("Polling Jira for work items assigned to the agents' accounts.");
+  }
+
+  const server = http.createServer(async (req, res) => {
     const send = (status, body) => { res.writeHead(status, { "content-type": "application/json" }); res.end(JSON.stringify(body)); };
     const url = new URL(req.url ?? "/", "http://localhost");
     if (req.method === "GET" && url.pathname === "/healthz") { res.writeHead(204).end(); return; }
@@ -75,13 +92,12 @@ export function createServer(cfg, overrides = {}) {
         if (inv.agentAccountId && inv.agentAccountId !== "UNKNOWN") {
           console.log(`${agent.name}'s Jira account is ${inv.agentAccountId} (map it in Lessel settings).`);
         }
-        const deps = depsFor(agent, { ...fit, issueKey: inv.issueKey }, systemToken);
-        if (!queues.has(agent.id)) queues.set(agent.id, new SerialQueue());
-        queues.get(agent.id).push(() => workOn(task, inv, agent, { ...deps, store }));
+        enqueue(agent, task, inv, depsFor(agent, { ...fit, issueKey: inv.issueKey }, systemToken));
       },
     });
     return send(200, response);
   });
+  return server;
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
