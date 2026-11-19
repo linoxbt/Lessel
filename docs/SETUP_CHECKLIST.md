@@ -26,9 +26,9 @@ available there; the agent connectors and MCP need it.
 | `ledger` component in INC | Not created (the connector can't). Optional: the pipeline now opens incidents without it |
 | Creating INC issues as you | Jira refuses: add yourself as an **agent** in INC (Project settings → People) before the pipeline opens incidents |
 | **Lessel deployed and installed** (Jira + Confluence, development environment) | Done. Database created; Confluence events reach it |
-| Link between the two apps (signed web trigger, secret in both apps) | Done and tested live |
-| **Lessel for Bitbucket** registered and deployed | Done. **Install** waits for your Bitbucket workspace |
-| Bitbucket token for Lessel (`BITBUCKET_EMAIL`, `BITBUCKET_API_TOKEN`) | Waits for the Bitbucket workspace |
+| Links between installations (Nov 19 audit fix) | Done: Bitbucket workspace, Confluence and the agent runner are each **paired** with this site, with their own secrets. The old shared variables (`LESSEL_BRIDGE_SECRET`, `LESSEL_BRIDGE_URL`, `LESSEL_BB_PROXY_URL`) are deleted. To re-pair: Lessel settings → Links |
+| Operator key (`LESSEL_OPERATOR_SECRET`, both apps) | Done. Kept only by the operator; used to pair the demo site's own installations |
+| **Lessel for Bitbucket** registered, deployed, installed | Done |
 | Bitbucket workspace **linoxbt**; Lessel for Bitbucket installed; Lessel reads Bitbucket through it (no token) | Done |
 | Repository `linoxbt/ledger-service` (project LESSEL) with the demo code | Done. Repo uuid `a9264758-09b3-4c90-82ed-8cc7a6e5511a`, workspace uuid `39b301d2-4269-41cf-ad01-e87f4e5f6c5d` (for Lessel's `repos` setting) |
 | Pipeline variables: STAGING_URL, RAILWAY_SERVICE, JIRA_BASE_URL, INCIDENT_PROJECT, INCIDENT_ISSUE_TYPE, INCIDENT_COMPONENT | Done. Secrets (RAILWAY_TOKEN, JIRA_EMAIL, JIRA_API_TOKEN) and enabling Pipelines come with the agents |

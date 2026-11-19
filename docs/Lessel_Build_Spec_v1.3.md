@@ -21,7 +21,7 @@ v1.2 for the design, and this page for where the build differs. Section numbers 
 | Holds | Derived (v1.2) | Derived, as in v1.2. Probation "new clean" means merged strictly after the confirmation | Confirmed in tests |
 | Shape rules | Risk-ordered classes | Same, plus: **test-file rules match first per file**, so a test-only change inside `src/domain` is `test-fix` | A real misclassification found while wiring the demo repo |
 | Teamwork Graph | Graph sweep from triggers if `asApp()` works | **`requestTeamworkGraph` is `asUser()` only** (confirmed in `@forge/api` types). Saved Cypher queries via `customQuery`; incidents found in the graph become *associated* signals when someone opens the issue panel; the dev chain shows in the panel | Raw `cypherQuery` isn't available to new apps, and triggers can't use the graph |
-| Installation topology (§5.1) | `[verify — blocking]` | **Answered on the live site: two apps.** Forge rejects one app with both site and workspace scopes ("Workspace scopes can not be used with site scopes"). Lessel (Jira + Confluence) holds all data; **Lessel for Bitbucket** forwards Bitbucket events and asks Lessel for the merge verdict over an HMAC-signed web trigger, and fails closed when Lessel can't answer. Lessel reads Bitbucket's REST API with a scoped token. This is design B of §5.1, with the web trigger as the link | Found by `forge deploy` |
+| Installation topology (§5.1) | `[verify — blocking]` | **Answered on the live site: two apps.** Forge rejects one app with both site and workspace scopes ("Workspace scopes can not be used with site scopes"). Lessel (Jira + Confluence) holds all data; **Lessel for Bitbucket** forwards Bitbucket events and asks Lessel for the merge verdict over an HMAC-signed web trigger, and fails closed when Lessel can't answer. Lessel makes its Bitbucket REST calls through Lessel for Bitbucket's proxy web trigger (no token). Since the Nov 19 audit, each Jira installation **pairs** with its own workspace, Confluence installation and runner, each with its own secret stored in that installation (see 1b). This is design B of §5.1, with the web trigger as the link | Found by `forge deploy` |
 | Installations | One | Forge lists Lessel's Jira and Confluence installs separately, and Forge SQL keeps **one database per installation**. Confluence events are forwarded to the Jira installation over the same signed link | Found when migrations created the schema twice |
 | Queue consumer | `resolver` + `method` | A plain `function`: the queue's event schema v2 rejects resolver consumers. Forge SQL must be declared (`sql` module) | Found deploying |
 | Demo hosting | "Your A2A server" | Railway project `lessel-demo`: ledger staging + Postgres, and the runner with a persistent volume. Both deploy from `main` and only rebuild when their own folder changes | Gives the Demo Agents app a stable HTTPS address |
@@ -80,12 +80,33 @@ against the code before it was fixed, and each fix has a regression test.
 
 The Setup check on the settings page tests the site-specific ones (link type, projects, severity field) live.
 
+## 1b. Audit fixes (Nov 19)
+
+An independent audit found one critical design flaw and several gaps. All were fixed and tested (97 Lessel
+tests, 48 runner tests):
+
+| Area | Before | Now |
+|---|---|---|
+| Links between installations | Partner addresses and one shared secret in app-wide Forge variables, so every installation would talk to the demo site | **Pairing per installation.** Settings → Links creates a code (bridge address + new secret); the partner pastes it. Secrets live in each installation's database or storage. Unpaired workspaces send nothing |
+| Keys | One master secret, also held by the agent runner | Each message kind is accepted only from its own key: Bitbucket link (events, merge check), Confluence link (events), runner link (reads and ticket fit, runner agents only), operator key (setup, jobs, pairing; held by no partner). Changes can't be replayed |
+| Events | Handled inside the web trigger call | Queued at once; an hourly catch-up re-reads open and recent PRs and deployments |
+| Green build for self-merge | Any successful commit status | A successful Pipelines run on the head commit (or only configured status keys) |
+| Settings | Free JSON | Validated per key; the AI endpoint and key variable are fixed in code |
+| Merges | Any branch counted | Only merges into the main branch count; a PR opened while assigned stays mergeable after reassignment |
+| Causes | Anyone could confirm or remove a link | Agents can't decide causes; a caused-by link must point from the work to the incident and follows the late-confirmation limit |
+| Clean Room | One range per page; quarantine cleared all restrictions | Taint episodes (re-poisoning after a fix is flagged; old ranges still count); quarantine restores the page's own restrictions; restricted page titles aren't revealed to agents |
+| Runner | Tests ran in the checkout with full privileges | Tests and npm run in a sandboxed copy without `.git`; git runs without hooks and with a minimal environment; deadlines, cancel, retries, per-agent branches; PRs only for finished work with passing tests |
+| Screens | Spinners on failure; local times labelled UTC | Errors with Retry; UTC everywhere; keys a viewer can't browse are hidden; no account ids shown |
+| Judge snapshot | Imported in the request; raw keys | Imported in the background, keys prefixed `DEMO`, no account ids |
+
 ## 4. Built beyond v1.2
 
 - **P4:** agent start validator; Clean Room restore, quarantine and LLM stage; History tab; reminders before a
   suspected cause expires; a reassignment hint in the panel.
-- **Judge snapshot export/import:** person ids become `staff`; the import is labelled "Imported history" and
-  starts in advisory mode.
+- **Judge snapshot export/import:** person ids become `staff`; agent account mappings stay behind; the import
+  runs in the background, prefixes keys with `DEMO`, is labelled "Imported history" and starts in advisory mode.
+- **Linked reads:** Confluence pages linked from an agent's work item are recorded (never excusing); a read in a
+  tainted range shows "possible bad input".
 - **Setup check:** configuration plus live Jira checks.
 - **Personal data reporting:** a weekly trigger reports stored account ids; closed accounts become
   `closed-account` everywhere and lose their agent login.

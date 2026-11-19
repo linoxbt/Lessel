@@ -1,7 +1,7 @@
 # Lessel
 
 **Earned autonomy for AI agents in Jira.** A Forge app for Codegeist 2026 (track: Apps for Software Teams;
-bonus target: Best Teamwork Graph integration).
+bonus target: Best Agents, Rovo/Assignable agents).
 
 An AI agent earns autonomy through real work. Lessel watches what happens after that work ships. When the agent
 causes a confirmed failure, its permissions change automatically. When the failure came from poisoned context,
@@ -15,9 +15,11 @@ numbers below (§) refer to it. Submission material: [judge guide](docs/JUDGES.m
 
 ## Status
 
-The P1 core, P2 Clean Room, P3 actions and the Teamwork Graph integration are built and tested locally. The
-demo rig (ledger-service repo, A2A runner, Demo Agents app) is in [`demo/`](demo/README.md). Nothing has been
-deployed yet: deploying needs your Atlassian login.
+The P1 core, P2 Clean Room, P3 actions and the Teamwork Graph integration are built and tested. Lessel and
+Lessel for Bitbucket run in the development environment on the demo site (lessel.atlassian.net and the
+`linoxbt` workspace), paired per installation. The demo rig (ledger-service repo, A2A runner, Demo Agents
+app) is in [`demo/`](demo/README.md); the runner is hosted on Railway. Not done yet: production deploy and
+distribution link, and registering the Teamwork Graph queries on the demo site.
 
 | Area | State |
 |---|---|

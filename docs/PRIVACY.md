@@ -30,11 +30,13 @@ them and are not kept.
 | Destination | When | What |
 |---|---|---|
 | Atlassian (Jira, Confluence, Bitbucket, Teamwork Graph) | Always | Standard product APIs through Forge, under the app's scopes |
+| Lessel's own paired installations (Forge web triggers, `*.hello.atlassian-dev.net`) | Only after an admin pairs them | Bitbucket events and merge checks from Lessel for Bitbucket; Bitbucket REST calls through it; Confluence events from Lessel's Confluence installation. Each pair has its own secret, kept in that installation; every request is signed. These stay inside Atlassian's Forge platform |
 | **Fortytwo** (`api.fortytwo.network`), running Qwen | Only when `ai.provider = "qwen"` (the default) | For the change-class fallback: a ticket's summary, description (first 4,000 characters) and changed file paths. For the Clean Room LLM stage: a page's title and text (first 20,000 characters). Declared in the manifest as egress with `inScopeEUD: true` |
 | Forge LLMs (Atlassian-hosted) | Only when `ai.provider = "forge"` | The same two inputs; the data doesn't leave Atlassian |
 
-With `ai.provider = "forge"` and the egress entry removed from `manifest.yml`, nothing leaves Atlassian, and
-the app is eligible for Runs on Atlassian. Fortytwo's own data handling is described on their site. Lessel
+With `ai.provider = "forge"` and the Fortytwo egress entry removed from `manifest.yml`, no ticket or page text
+leaves Atlassian. (The web-trigger egress between Lessel's own installations remains; Runs on Atlassian
+eligibility needs that checked separately.) Fortytwo's own data handling is described on their site. Lessel
 sends `store: false`-compatible requests and no account identifiers.
 
 ## What the AI is allowed to decide
@@ -47,9 +49,12 @@ Nothing on its own:
 
 ## Retention and deletion
 
-- Data lives in the installation's Forge SQL database for as long as the app is installed. Uninstalling the
+- Data lives in the Forge SQL database of the Jira installation that holds it (one per site), for as long as
+  the app is installed. Nothing is shared between customers: links to Bitbucket and Confluence are made per
+  site, by pairing. Uninstalling the
   app removes it per Forge's storage lifecycle.
-- History snapshots for judges replace person account ids with `staff` and exclude the staff audit log.
+- History snapshots for judges replace person account ids with `staff`, exclude the staff audit log, and leave
+  out the agents' account mappings, so no account ids leave the site.
 - Account ids appear only in `signals.decided_by`, `sources.confirmed_by`, `staff_actions.actor` and the agents'
   Jira/MCP logins. Lessel stores no names, emails or avatars.
 - **Personal data reporting.** Once a week Lessel reports those account ids through Forge's personal data

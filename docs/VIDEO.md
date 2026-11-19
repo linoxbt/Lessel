@@ -1,5 +1,11 @@
 # Video plan (under 5 minutes; target 3)
 
+**Done (Nov 19):** a 3:14 motion explainer (1080p, Kokoro `af_heart` voiceover, Mixkit sound effects and music
+under the Mixkit free licence) with Lessel's screens recreated from the demo site's real tickets. It isn't in
+the repo (38 MB). Judges usually want the real product: before submitting, splice in 30–60 seconds of real
+screen recording (the Lessel panel on a PAY ticket, the merge check on a real PR, the Clean Room tab). The plan
+below is the live-footage script.
+
 Fill the `{placeholders}` from the board on **Mon Dec 14** (spec v1.2 §17.3). Record **Dec 17–18**. Use English
 and no copyrighted music. Disclose:
 - the planted runbook;

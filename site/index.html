@@ -126,10 +126,11 @@
   <div class="arch">
     <div class="box"><strong>Lessel</strong><span>Jira + Confluence · Forge SQL · all data and decisions</span></div>
     <div class="link">⇄<span>signed web trigger</span></div>
-    <div class="box"><strong>Lessel for Bitbucket</strong><span>forwards events · asks for the merge verdict · fails closed</span></div>
+    <div class="box"><strong>Lessel for Bitbucket</strong><span>forwards events · asks for the merge verdict · fails closed · paired per site</span></div>
   </div>
   <p class="small">Forge apps can't hold site and workspace permissions together, so the Bitbucket half is a
-    thin second app. Every request between them is HMAC-signed, and Lessel needs no Bitbucket token. AI runs on
+    thin second app. Each site pairs with its own workspace, every request between them is HMAC-signed with
+    that pair's own secret, and Lessel needs no Bitbucket token. AI runs on
     Qwen (Qwen3.8-27B via Fortytwo), with Forge LLMs as an Atlassian-hosted option.</p>
 </section>
 
@@ -139,9 +140,9 @@
     <div class="card">
       <h3>See it in about 10 minutes</h3>
       <ol>
-        <li>Install Lessel on a Jira site (Bitbucket optional).</li>
+        <li>Install Lessel on a Jira site. Bitbucket is optional: install Lessel for Bitbucket and pair it from Lessel settings.</li>
         <li>Import the history snapshot from the submission in Lessel settings.</li>
-        <li>Link an incident to a work item, then click <em>Confirm cause</em> and watch the level change.</li>
+        <li>On an imported item, reopen a confirmed cause, then confirm it again, and watch the level and History change.</li>
       </ol>
       <p><a class="button" href="https://github.com/linoxbt/Lessel/blob/main/docs/JUDGES.md">Judges' guide</a></p>
     </div>
@@ -160,7 +161,7 @@
 </main>
 
 <footer class="wrap footer">
-  <p>Lessel · Codegeist 2026 · Apps for Software Teams · Bonus: Best Teamwork Graph integration</p>
+  <p>Lessel · Codegeist 2026 · Apps for Software Teams · Bonus: Best Agents (Rovo/Assignable agents)</p>
 </footer>
 
 </body>

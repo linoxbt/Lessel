@@ -1,6 +1,6 @@
 # Lessel — Devpost write-up (draft)
 
-**Track:** Apps for Software Teams · **Bonus:** Best Teamwork Graph integration
+**Track:** Apps for Software Teams · **Bonus:** Best Agents (Rovo/Assignable agents)
 
 ## Inspiration
 
@@ -37,14 +37,17 @@ production. We wanted agents to earn autonomy the way a new engineer does.
 |---|---|
 | Jira | Work items, assignment and status events, issue links (incidents and caused-by), the issue panel, the project-page board, the admin page, the Ready-to-merge and agent-start workflow validators |
 | Jira Service Management | Incidents and their priority/severity as failure signals |
-| Bitbucket | PR, push, merge and deployment events; the `bitbucket:mergeCheck`; PR comments; commit statuses for green builds |
+| Bitbucket | Through a companion app, Lessel for Bitbucket (Forge can't hold site and workspace scopes in one app), paired per site with its own signed link: PR, push, merge and deployment events; the `bitbucket:mergeCheck`; PR comments; Pipelines runs as the only proof of a green build |
 | Confluence | Page events and version history for Clean Room scanning; restoring the last clean version |
 | Teamwork Graph | Saved Cypher queries: incidents linked to a work item (`jsm_incident_links_jira_work_item`) become signals when anyone views it, and the commit → PR → deployment chain is shown as evidence |
 | Rovo | The Dispatcher agent + skill (who should take this ticket?), Rovo actions, and a `rovo:mcp` server whose tools bind identity to the calling account |
-| Forge platform | Forge SQL, async events queue, scheduled trigger, no remotes. AI is Qwen (Qwen3.8-27B via Fortytwo, one declared egress host), with Forge LLMs as an Atlassian-hosted alternative in settings |
+| Forge platform | Forge SQL, async events queue, scheduled triggers, web triggers between Lessel's own paired installations, no remotes. AI is Qwen (Qwen3.8-27B via Fortytwo, the only outside egress host), with Forge LLMs as an Atlassian-hosted alternative in settings |
 
 Our test agents live in a **separate** Forge app with two `rovo:agentConnector` modules (Atlas and Brook),
-backed by an A2A 1.0 runner that codes with Qwen (Qwen3.8-27B via Fortytwo). Lessel itself has no remotes. It works with anyone's agents.
+backed by an A2A 1.0 runner that codes with Qwen (Qwen3.8-27B via Fortytwo). On our demo site the agents also
+pick up work assigned to their own Jira accounts, so they keep working where connectors can't be assigned yet.
+The runner reports what it read over its own narrow link to Lessel; third-party agents use Lessel's MCP tools,
+where identity comes from the calling account. Lessel itself has no remotes. It works with anyone's agents.
 
 **AI in Lessel** is deliberately small and advisory. Qwen classifies a change only when the path map can't, and
 reviews suspect Confluence pages, quoting the exact poisoned sentence. A quote that isn't verbatim in the page
