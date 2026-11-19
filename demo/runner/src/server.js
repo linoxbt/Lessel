@@ -9,10 +9,22 @@ import { Git } from "./git.js";
 import { Bitbucket, Confluence, commentOnIssue } from "./atlassian.js";
 import { Lessel, LesselBridge } from "./lessel.js";
 import { runAgent } from "./agent.js";
-import { workOn, SerialQueue } from "./work.js";
-import { startPolling, commentAsAgent } from "./poller.js";
+import { sandboxIdentity } from "./sandbox.js";
+import { workOn, SerialQueue, abortTask } from "./work.js";
+import { startPolling, commentAsAgent, pollIntervalMs } from "./poller.js";
 
 const MAX_BODY = 1024 * 1024;
+
+/**
+ * Signed bridge when configured (no per-agent MCP sign-in); otherwise Lessel's MCP server as the agent.
+ * The bridge uses the runner's own secret (LESSEL_RUNNER_SECRET), which Lessel accepts only for the runner's
+ * message kinds; the runner never holds Lessel's master bridge secret.
+ */
+export function lesselClient(cfg, agent, env = process.env) {
+  return env.LESSEL_BRIDGE_URL && env.LESSEL_RUNNER_SECRET
+    ? new LesselBridge({ url: env.LESSEL_BRIDGE_URL, secret: env.LESSEL_RUNNER_SECRET, agentId: agent.id })
+    : new Lessel({ url: cfg.lesselMcpUrl, tokenFile: agent.mcpTokenFile });
+}
 
 export function createServer(cfg, overrides = {}) {
   const store = overrides.store ?? new TaskStore(cfg.taskFile);
@@ -32,10 +44,7 @@ export function createServer(cfg, overrides = {}) {
         mainBranch: cfg.repo.mainBranch, ...agent.git }),
       bitbucket,
       confluence: new Confluence({ baseUrl: cfg.siteUrl, ...agent.confluence }),
-      // Signed bridge when configured (no per-agent MCP sign-in); otherwise Lessel's MCP server as the agent.
-      lessel: process.env.LESSEL_BRIDGE_URL && process.env.LESSEL_BRIDGE_SECRET
-        ? new LesselBridge({ url: process.env.LESSEL_BRIDGE_URL, secret: process.env.LESSEL_BRIDGE_SECRET, agentId: agent.id })
-        : new Lessel({ url: cfg.lesselMcpUrl, tokenFile: agent.mcpTokenFile }),
+      lessel: lesselClient(cfg, agent),
       runAgent,
       mainBranch: cfg.repo.mainBranch,
       comment: text => commentOnIssue({ jiraBase: jiraBase(fit), systemToken, issueKey: fit.issueKey, text }),
@@ -44,12 +53,12 @@ export function createServer(cfg, overrides = {}) {
 
   const enqueue = (agent, task, inv, deps) => {
     if (!queues.has(agent.id)) queues.set(agent.id, new SerialQueue());
-    queues.get(agent.id).push(() => workOn(task, inv, agent, { ...deps, store }));
+    queues.get(agent.id).push(() => workOn(task, inv, agent, { deadlineMs: cfg.taskDeadlineMs, ...deps, store }));
   };
 
   // Jira assignments to the agents' own accounts (when AI agent connectors aren't available on the site).
   if (overrides.poll ?? process.env.RUNNER_POLL === "1") {
-    startPolling({ cfg, store, intervalMs: Number(process.env.RUNNER_POLL_SECONDS ?? 60) * 1000,
+    startPolling({ cfg, store, intervalMs: pollIntervalMs(process.env.RUNNER_POLL_SECONDS),
       startWork: (agent, task, inv) => {
         const deps = depsFor(agent, { issueKey: inv.issueKey }, null);
         deps.comment = text => commentAsAgent({ siteUrl: cfg.siteUrl, ...agent.confluence, issueKey: inv.issueKey, text });
@@ -88,6 +97,7 @@ export function createServer(cfg, overrides = {}) {
     const response = await handleRpc(body, {
       store,
       agentId: agent.id,
+      onCancel: task => abortTask(task.id),     // stop the model call and any running tests, not just the status
       start: (task, inv) => {
         if (inv.agentAccountId && inv.agentAccountId !== "UNKNOWN") {
           console.log(`${agent.name}'s Jira account is ${inv.agentAccountId} (map it in Lessel settings).`);
@@ -102,6 +112,9 @@ export function createServer(cfg, overrides = {}) {
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const cfg = loadConfig();
+  if (!sandboxIdentity() && process.env.RUNNER_ALLOW_UNSANDBOXED_TESTS !== "1") {
+    console.warn("No sandbox user (the runner isn't root): agents can't run tests or update dependencies.");
+  }
   // Skipping token checks is for local testing: then the runner only listens on localhost.
   const host = cfg.skipFit ? "127.0.0.1" : undefined;
   createServer(cfg).listen(cfg.port, host, () =>

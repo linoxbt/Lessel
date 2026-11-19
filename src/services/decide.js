@@ -16,13 +16,25 @@ async function humanApprovals(pr) {
     !agentAccounts.has(n(p.user?.uuid))).length;
 }
 
-async function buildIsGreen(pr) {
+/**
+ * Is the PR's head commit green? Self-merge depends on it, so it must be evidence an agent can't post itself
+ * (audit S5): a successful Pipelines run on that commit, or only the configured status keys.
+ */
+async function buildIsGreen(pr, cfg) {
   const sha = pr.source?.commit?.hash;
   const ws = pr.destination?.repository?.workspace?.uuid ?? pr.source?.repository?.workspace?.uuid;
   const rp = pr.destination?.repository?.uuid;
   if (!sha || !ws || !rp) return false;
-  const list = await ports.bitbucket.commitStatuses(ws, rp, sha);
-  return list.length > 0 && list.every(s => s.state === "SUCCESSFUL");
+  const build = cfg?.build ?? { source: "pipelines", statusKeys: [] };
+  if (build.source === "statuses") {
+    const keys = new Set(build.statusKeys);
+    const list = (await ports.bitbucket.commitStatuses(ws, rp, sha)).filter(s => keys.has(s.key));
+    return keys.size > 0 && [...keys].every(k => list.some(s => s.key === k && s.state === "SUCCESSFUL")) &&
+      list.every(s => s.state === "SUCCESSFUL");
+  }
+  const runs = await ports.bitbucket.pipelinesForCommit(ws, rp, sha);
+  const latest = runs[0];
+  return !!latest && latest.state?.name === "COMPLETED" && latest.state?.result?.name === "SUCCESSFUL";
 }
 
 /**
@@ -39,13 +51,13 @@ async function decide({ agent, shape, issueKey, pr = null }, cfg) {
   let serviceFloor = 1;
   if (shape.classified_by === "llm") {
     const service = String(shape.shape_id).split("/")[0];
-    const levels = (await repo.allRecords())
-      .filter(r => r.subject_id === agent.agent_id && String(r.shape_id).startsWith(`${service}/`) && r.earned_level != null)
+    const levels = (await repo.recordsForAgent(agent.agent_id))
+      .filter(r => String(r.shape_id).startsWith(`${service}/`) && r.earned_level != null)
       .map(r => Number(r.earned_level));
     if (levels.length) serviceFloor = Math.min(...levels);
   }
   let d = decideCore({ agent, shape, rec, holds, ctx, serviceFloor }, cfg);
-  if (pr && needsBuildCheck(d)) d = decideCore({ agent, shape, rec, holds, ctx, serviceFloor, buildGreen: await buildIsGreen(pr) }, cfg);
+  if (pr && needsBuildCheck(d)) d = decideCore({ agent, shape, rec, holds, ctx, serviceFloor, buildGreen: await buildIsGreen(pr, cfg) }, cfg);
   return d;
 }
 

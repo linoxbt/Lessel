@@ -11,6 +11,18 @@ const { excusingReads } = require("../core/cleanroom");
 
 class UserError extends Error {}
 
+/**
+ * Causes are decided by people. An agent's own accounts can't confirm, dismiss or reopen them (it could clear
+ * its own failures), and a link an agent removes doesn't undo a confirmation (audit B5).
+ */
+async function isAgentAccount(accountId) {
+  if (!accountId || /^(lessel|link):/.test(accountId)) return false;
+  return !!(await repo.agentForAccount(["jira", "mcp"], accountId));
+}
+async function requirePerson(actor) {
+  if (await isAgentAccount(actor)) throw new UserError("AI agents can't decide causes; a person has to.");
+}
+
 /** After any signal change on an item: refresh outcome, recompute, notify if the decision changed. */
 async function afterItemChange(issueKey, cause, cfg) {
   cfg = cfg ?? await repo.getSettings();
@@ -47,12 +59,13 @@ async function maybeExcuse(signalId) {
   const hits = excusingReads(await repo.readsForItem(sig.issue_key), item);
   if (!hits.length) return null;
   const src = hits[0].source;
-  await repo.setCausality(signalId, "excused", { by: "lessel:clean-room", via: `source:${src.source_id}`, from: ["confirmed"] });
+  if (!(await repo.setExcused(signalId, src.source_id))) return null;
   return src;
 }
 
 async function confirmCause(signalId, actor, { via = "button", cfg } = {}) {
   cfg = cfg ?? await repo.getSettings();
+  await requirePerson(actor);
   const sig = await repo.getSignal(signalId);
   if (!sig) throw new UserError("Unknown signal.");
   const item = await repo.getItem(sig.issue_key);
@@ -68,6 +81,7 @@ async function confirmCause(signalId, actor, { via = "button", cfg } = {}) {
 }
 
 async function dismissCause(signalId, actor, { cfg } = {}) {
+  await requirePerson(actor);
   const sig = await repo.getSignal(signalId);
   if (!sig) throw new UserError("Unknown signal.");
   const ok = await repo.setCausality(signalId, "dismissed", { by: actor, from: ["associated", "suspected"] });
@@ -81,6 +95,7 @@ async function dismissCause(signalId, actor, { cfg } = {}) {
 /** Admin: put a decided signal back to associated (audited, note required). Also how rehearsals reset. */
 async function reopenDecision(signalId, actor, note, { cfg } = {}) {
   if (!note || !String(note).trim()) throw new UserError("A note is required to reopen a decision.");
+  await requirePerson(actor);
   const sig = await repo.getSignal(signalId);
   if (!sig) throw new UserError("Unknown signal.");
   const ok = await repo.setCausality(signalId, "associated", { by: actor, from: ["confirmed", "dismissed", "excused"] });
@@ -91,9 +106,15 @@ async function reopenDecision(signalId, actor, note, { cfg } = {}) {
   return fresh;
 }
 
-/** Caused-by link deleted: undo a confirmation that came from it. */
-async function revertLinkConfirmation(linkId, cfg) {
-  for (const sig of await repo.signalsByVia(`link:${linkId}`)) {
+/** Caused-by link deleted: undo a confirmation that came from it, unless an agent account removed the link. */
+async function revertLinkConfirmation(linkId, cfg, actor = null) {
+  const sigs = await repo.signalsByVia(`link:${linkId}`);
+  if (sigs.length && await isAgentAccount(actor)) {
+    await repo.logStaffAction({ actor, action: "agent-unlink", target: `link:${linkId}`,
+      note: "An AI agent removed a caused-by link; the confirmation stands." });
+    return;
+  }
+  for (const sig of sigs) {
     if (sig.causality !== "confirmed" && sig.causality !== "excused") continue;
     await repo.setCausality(sig.signal_id, "associated", { by: `link:${linkId}`, via: null });
     const fresh = await repo.getSignal(sig.signal_id);
@@ -127,9 +148,8 @@ async function remindSuspected(cfg) {
     if (!item?.window_ends) continue;
     const expiresAt = item.window_ends.getTime() + cfg.suspectedExpiryHours * 3600e3;
     if (now < expiresAt - cfg.suspectedReminderHours * 3600e3 || now >= expiresAt) continue;
-    const fresh = await repo.insertDecisionEvent({ event_id: `remind:${sig.signal_id}:r${sig.rev}`.slice(0, 255),
-      agent_id: item.agent_id ?? "team", shape_id: item.shape_id, before: {}, after: {}, cause: `reminder for ${sig.signal_id}` });
-    if (!fresh) continue;
+    // Claimed once per signal revision (kept out of decision history, which is for decisions).
+    if (!(await repo.claimOnce(`remind:${sig.signal_id}:r${sig.rev}`))) continue;
     const when = new Date(expiresAt).toISOString().slice(0, 16).replace("T", " ");
     try {
       await ports.jira.addComment(sig.issue_key, `Lessel: ${sig.kind} ${sig.ref ?? ""} is suspected of being caused by this work item. ` +
@@ -158,7 +178,7 @@ async function reexcuseForSource(sourceId, cfg) {
       } else if (sig.causality === "excused" && item) {
         // The range narrowed or the taint was dismissed: if no timely tainted read remains, the failure counts again.
         if (excusingReads(await repo.readsForItem(key), item).length) continue;
-        if (await repo.setCausality(sig.signal_id, "confirmed", { by: "lessel:clean-room", via: `unexcused:${sourceId}`, from: ["excused"] })) {
+        if (await repo.setExcused(sig.signal_id, null)) {
           const fresh = await repo.getSignal(sig.signal_id);
           await afterItemChange(key, { id: sig.signal_id, rev: fresh.rev,
             text: `${describe(sig, key)}: the excusal was withdrawn because the source is no longer tainted at the version read` }, cfg);
@@ -169,5 +189,5 @@ async function reexcuseForSource(sourceId, cfg) {
   return keys;
 }
 
-module.exports = { UserError, afterItemChange, maybeExcuse, confirmCause, dismissCause, reopenDecision,
+module.exports = { UserError, isAgentAccount, requirePerson, afterItemChange, maybeExcuse, confirmCause, dismissCause, reopenDecision,
   revertLinkConfirmation, expireSuspected, remindSuspected, reexcuseForSource, describe };

@@ -25,14 +25,25 @@ modules:
         - on-reviewer-status-changed
         - on-merge
 
-  # Lessel (the site app) calls this, signed, to make the Bitbucket REST calls it needs (reads, PR comments).
+  # The paired Lessel site calls this, signed, to make the Bitbucket REST calls it needs (reads, PR comments).
   webtrigger:
     - key: bitbucket-proxy
       function: bitbucketProxy
       response:
         type: dynamic
 
+  # Workspace settings → Lessel: pair this workspace with one Lessel site.
+  bitbucket:workspaceSettingsMenuPage:
+    - key: lessel-link
+      title: Lessel
+      resource: settings
+      render: native
+      resolver:
+        function: settingsResolver
+
   function:
+    - key: settingsResolver
+      handler: index.settingsResolver
     - key: bitbucketProxy
       handler: index.bitbucketProxy
     - key: onEvent
@@ -40,8 +51,13 @@ modules:
     - key: mergeCheck
       handler: index.mergeCheck
 
+resources:
+  - key: settings
+    path: src/frontend/settings.jsx
+
 permissions:
   scopes:
+    - storage:app                   # this workspace's link to its Lessel site
     - read:pullrequest:bitbucket
     - read:repository:bitbucket
     - read:pipeline:bitbucket
@@ -49,5 +65,5 @@ permissions:
   external:
     fetch:
       backend:
-        # Lessel's web trigger (its URL is set in LESSEL_BRIDGE_URL).
+        # The paired Lessel site's web trigger (from the pairing code).
         - address: "*.hello.atlassian-dev.net"

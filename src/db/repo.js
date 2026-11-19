@@ -3,6 +3,7 @@
 
 const { query, exec, one, ts, toDate } = require("./driver");
 const { DEFAULTS } = require("../core/defaults");
+const { validateSetting, mergeSetting } = require("../core/settings");
 
 const NOW = "CURRENT_TIMESTAMP(3)";
 // Business times (decided_at, observed_at) follow the app clock so tests and replays are consistent.
@@ -13,14 +14,18 @@ async function getSettings() {
   const rows = await query("SELECT setting_key, value_json FROM settings", []);
   const cfg = JSON.parse(JSON.stringify(DEFAULTS));
   for (const r of rows) {
-    try { cfg[r.setting_key] = JSON.parse(r.value_json); } catch { /* keep default */ }
+    if (!Object.hasOwn(DEFAULTS, r.setting_key)) continue;
+    // A stored value that no longer validates (older version, edited by hand) falls back to the default.
+    try { cfg[r.setting_key] = mergeSetting(cfg[r.setting_key], validateSetting(r.setting_key, JSON.parse(r.value_json))); } catch { /* keep default */ }
   }
   return cfg;
 }
+/** Validates (throws SettingError with an admin-readable message) and stores the normalised value. */
 async function setSetting(key, value) {
-  if (!(key in DEFAULTS)) throw new Error(`Unknown setting ${key}`);
+  const clean = validateSetting(key, value);
   await exec(`INSERT INTO settings (setting_key, value_json) VALUES (?, ?)
-    ON DUPLICATE KEY UPDATE value_json = VALUES(value_json), updated_at = ${NOW}`, [key, JSON.stringify(value)]);
+    ON DUPLICATE KEY UPDATE value_json = VALUES(value_json), updated_at = ${NOW}`, [key, JSON.stringify(clean)]);
+  return clean;
 }
 
 // ---------- personal data (Forge personal data reporting) ----------
@@ -50,8 +55,18 @@ async function eraseAccount(accountId) {
 }
 
 // ---------- events ----------
-const seen = async key => !!(await one("SELECT 1 AS x FROM events_seen WHERE event_key = ?", [key]));
-const markSeen = key => exec("INSERT IGNORE INTO events_seen (event_key) VALUES (?)", [key]);
+const seen = async key => !!(await one("SELECT 1 AS x FROM events_seen WHERE event_key = ?", [seenKey(key)]));
+/** Keys longer than the column (long push events) are hashed, so dedupe never fails on length. */
+const seenKey = key => (String(key).length <= 255 ? String(key)
+  : `h:${require("crypto").createHash("sha256").update(String(key)).digest("hex")}`);
+const markSeen = key => exec("INSERT IGNORE INTO events_seen (event_key) VALUES (?)", [seenKey(key)]);
+/** Claim a key once (replay protection): true the first time, false after. */
+async function claimOnce(key) {
+  const r = await exec("INSERT IGNORE INTO events_seen (event_key) VALUES (?)", [seenKey(key)]);
+  return r.affectedRows > 0;
+}
+/** Hourly: forget dedupe keys older than `days` (events are never redelivered that late). */
+const pruneSeen = (now, days = 30) => exec("DELETE FROM events_seen WHERE seen_at < ?", [ts(new Date(now.getTime() - days * 86400e3))]);
 
 // ---------- agents ----------
 // Bitbucket UUIDs arrive with or without braces and in mixed case; store and compare one form.
@@ -108,12 +123,24 @@ async function createItem({ issue_key, actor_kind, assigned_agent_id = null, sha
 /** Only fields in `allowed` can be patched; every patch bumps updated_at (recompute watermark). */
 const ITEM_FIELDS = new Set(["actor_kind", "assigned_agent_id", "agent_id", "repo_uuid", "shape_id", "shape_state",
   "classified_by", "size_lines", "merged_at", "deployed_at", "window_ends", "outcome", "changed_after_window"]);
+// Shape fields of a frozen item never change again; a patch that would (a late event racing the freeze) only
+// writes its other fields.
+const SHAPE_FIELDS = new Set(["shape_id", "shape_state", "classified_by"]);
 async function patchItem(key, patch) {
   const cols = Object.keys(patch).filter(k => ITEM_FIELDS.has(k));
   if (!cols.length) return;
-  const vals = cols.map(k => (patch[k] instanceof Date ? ts(patch[k]) : patch[k]));
-  await exec(`UPDATE work_items SET ${cols.map(c => `${c} = ?`).join(", ")}, updated_at = ${NOW} WHERE issue_key = ?`,
-    [...vals, key]);
+  const val = k => (patch[k] instanceof Date ? ts(patch[k]) : patch[k]);
+  const freezing = patch.shape_state === "frozen";
+  const shapeCols = freezing ? [] : cols.filter(c => SHAPE_FIELDS.has(c));
+  const other = cols.filter(c => !shapeCols.includes(c));
+  if (other.length) {
+    await exec(`UPDATE work_items SET ${other.map(c => `${c} = ?`).join(", ")}, updated_at = ${NOW} WHERE issue_key = ?`,
+      [...other.map(val), key]);
+  }
+  if (shapeCols.length) {
+    await exec(`UPDATE work_items SET ${shapeCols.map(c => `${c} = ?`).join(", ")}, updated_at = ${NOW}
+      WHERE issue_key = ? AND shape_state <> 'frozen'`, [...shapeCols.map(val), key]);
+  }
 }
 const itemsForAgentShape = async (agentId, shapeId) =>
   (await query(`SELECT * FROM work_items WHERE agent_id = ? AND shape_id = ? AND actor_kind = 'agent'
@@ -138,16 +165,20 @@ const itemsForAgent = async agentId => (await query(
 // ---------- PRs ----------
 async function upsertPr(pr) {
   await exec(`INSERT INTO prs (repo_uuid, pr_id, workspace_uuid, issue_key, agent_id, state, head_commit,
-      merge_commit, shape_id, shape_head, classified_by)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      merge_commit, shape_id, shape_head, classified_by, opened_by_assignee)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON DUPLICATE KEY UPDATE workspace_uuid = VALUES(workspace_uuid), issue_key = VALUES(issue_key),
-      agent_id = VALUES(agent_id), state = VALUES(state), head_commit = VALUES(head_commit),
+      agent_id = VALUES(agent_id),
+      -- a late, out-of-order "updated" event must not turn a merged or declined PR back into an open one
+      state = IF(state IN ('merged', 'side-merged', 'declined') AND VALUES(state) = 'open', state, VALUES(state)),
+      head_commit = VALUES(head_commit),
+      opened_by_assignee = COALESCE(opened_by_assignee, VALUES(opened_by_assignee)),
       merge_commit = COALESCE(VALUES(merge_commit), merge_commit),
       shape_id = COALESCE(VALUES(shape_id), shape_id), shape_head = COALESCE(VALUES(shape_head), shape_head),
       classified_by = COALESCE(VALUES(classified_by), classified_by), updated_at = ${NOW}`,
   [pr.repo_uuid, pr.pr_id, pr.workspace_uuid ?? null, pr.issue_key, pr.agent_id ?? null, pr.state,
     pr.head_commit ?? null, pr.merge_commit ?? null, pr.shape_id ?? null, pr.shape_head ?? null,
-    pr.classified_by ?? null]);
+    pr.classified_by ?? null, pr.opened_by_assignee ?? null]);
 }
 const getPrRow = (repo, id) => one("SELECT * FROM prs WHERE repo_uuid = ? AND pr_id = ?", [repo, id]);
 const prsForItem = key => query("SELECT * FROM prs WHERE issue_key = ? ORDER BY pr_id", [key]);
@@ -160,11 +191,17 @@ async function addPrCommits(repo, prId, shas) {
   for (const sha of shas) await exec("INSERT IGNORE INTO pr_commits (repo_uuid, pr_id, sha) VALUES (?, ?, ?)", [repo, prId, sha]);
 }
 /** PR whose merge commit or one of its commits matches a (possibly abbreviated) sha. */
+// Bitbucket reports merge commits abbreviated (12 characters) while revert messages carry the full 40: match
+// whichever side is the prefix of the other, with at least 7 characters stored.
 async function prForCommit(repo, sha) {
+  sha = String(sha).toLowerCase();
+  if (!/^[0-9a-f]{7,40}$/.test(sha)) return null;
   const like = `${sha}%`;
-  return (await one(`SELECT p.* FROM prs p WHERE p.repo_uuid = ? AND p.state = 'merged' AND p.merge_commit LIKE ?`, [repo, like]))
+  return (await one(`SELECT p.* FROM prs p WHERE p.repo_uuid = ? AND p.state = 'merged' AND (p.merge_commit LIKE ?
+      OR (CHAR_LENGTH(p.merge_commit) >= 7 AND ? LIKE CONCAT(p.merge_commit, '%'))) LIMIT 1`, [repo, like, sha]))
     ?? one(`SELECT p.* FROM pr_commits c JOIN prs p ON p.repo_uuid = c.repo_uuid AND p.pr_id = c.pr_id
-      WHERE c.repo_uuid = ? AND c.sha LIKE ? AND p.state = 'merged' LIMIT 1`, [repo, like]);
+      WHERE c.repo_uuid = ? AND p.state = 'merged' AND (c.sha LIKE ?
+        OR (CHAR_LENGTH(c.sha) >= 7 AND ? LIKE CONCAT(c.sha, '%'))) LIMIT 1`, [repo, like, sha]);
 }
 
 // ---------- signals ----------
@@ -181,8 +218,18 @@ async function insertSignal(s) {
 /** Change causality; bumps rev. `from` guards against overwriting a concurrent decision. */
 async function setCausality(id, causality, { by = null, via = null, from = null } = {}) {
   const r = await exec(`UPDATE signals SET causality = ?, decided_by = ?, confirmed_via = ?, decided_at = ?,
-      rev = rev + 1, updated_at = ${NOW} WHERE signal_id = ? ${from ? "AND causality IN (" + from.map(() => "?").join(",") + ")" : ""}`,
+      excused_source = NULL, rev = rev + 1, updated_at = ${NOW}
+    WHERE signal_id = ? ${from ? "AND causality IN (" + from.map(() => "?").join(",") + ")" : ""}`,
   [causality, by, via, nowTs(), id, ...(from ?? [])]);
+  return r.affectedRows > 0;
+}
+/**
+ * Clean Room excusal and its withdrawal: only causality and the excusing source change. Who confirmed the
+ * cause, and how (a link, a button, a revert), stay on the signal.
+ */
+async function setExcused(id, sourceId) {
+  const r = await exec(`UPDATE signals SET causality = ?, excused_source = ?, rev = rev + 1, updated_at = ${NOW}
+    WHERE signal_id = ? AND causality = ?`, sourceId ? ["excused", sourceId, id, "confirmed"] : ["confirmed", null, id, "excused"]);
   return r.affectedRows > 0;
 }
 const setSeverity = (id, sev) => exec(`UPDATE signals SET severity = ?, updated_at = ${NOW} WHERE signal_id = ?`, [sev, id]);
@@ -228,6 +275,13 @@ async function upsertRecord({ subject_id, shape_id, clean, total, lower90, earne
 }
 const getRecord = (subject, shape) => one("SELECT * FROM records WHERE subject_id = ? AND shape_id = ?", [subject, shape]);
 const allRecords = () => query("SELECT * FROM records ORDER BY subject_id, shape_id", []);
+// Batched reads for screens that list many items (one query per table instead of one per item).
+const IN = keys => keys.map(() => "?").join(",");
+const itemsByKeys = async keys => (keys.length ? (await query(`SELECT * FROM work_items WHERE issue_key IN (${IN(keys)})`, keys)).map(itemRow) : []);
+const prsForItems = keys => (keys.length ? query(`SELECT * FROM prs WHERE issue_key IN (${IN(keys)}) ORDER BY pr_id`, keys) : []);
+const signalsForItems = async keys => (keys.length ? (await query(`SELECT * FROM signals WHERE issue_key IN (${IN(keys)}) ORDER BY observed_at`, keys)).map(sigRow) : []);
+const readsForItems = async keys => (keys.length ? (await query(`${READ_JOIN} WHERE r.issue_key IN (${IN(keys)}) ORDER BY r.recorded_at`, keys)).map(joinRead) : []);
+const recordsForAgent = agentId => query("SELECT * FROM records WHERE subject_id = ? ORDER BY shape_id", [agentId]);
 
 // ---------- holds ----------
 const activeHolds = (agentId, shapeId) => query(`SELECT * FROM holds WHERE agent_id = ? AND shape_id = ?
@@ -271,7 +325,8 @@ async function upsertSource({ source_id, url, title = null }) {
 }
 const getSource = id => one("SELECT * FROM sources WHERE source_id = ?", [id]);
 const listSources = () => query(`SELECT * FROM sources WHERE state <> 'clean' AND state <> 'unscanned' ORDER BY source_id`, []);
-const SOURCE_FIELDS = new Set(["state", "rationale", "tainted_from_version", "clean_from_version", "confirmed_by", "confirmed_at", "title"]);
+const SOURCE_FIELDS = new Set(["state", "rationale", "tainted_from_version", "clean_from_version", "confirmed_by", "confirmed_at", "title",
+  "past_ranges", "saved_restrictions"]);
 async function patchSource(id, patch) {
   const cols = Object.keys(patch).filter(k => SOURCE_FIELDS.has(k));
   if (!cols.length) return;
@@ -295,15 +350,32 @@ function joinRead(r) {
     version_basis: r.version_basis, method: r.method, flag: r.flag, read_at: toDate(r.read_at),
     recorded_at: toDate(r.recorded_at),
     source: { source_id: r.source_id, url: r.url, title: r.title, state: r.state,
-      tainted_from_version: r.tainted_from_version, clean_from_version: r.clean_from_version },
+      tainted_from_version: r.tainted_from_version, clean_from_version: r.clean_from_version, past_ranges: r.past_ranges },
   };
 }
-const READ_JOIN = `SELECT r.*, s.url, s.title, s.state, s.tainted_from_version, s.clean_from_version
+const READ_JOIN = `SELECT r.*, s.url, s.title, s.state, s.tainted_from_version, s.clean_from_version, s.past_ranges
   FROM context_reads r JOIN sources s ON s.source_id = r.source_id`;
 const readsForItem = async key => (await query(`${READ_JOIN} WHERE r.issue_key = ? ORDER BY r.recorded_at`, [key])).map(joinRead);
 const readsForSource = async id => (await query(`${READ_JOIN} WHERE r.source_id = ? ORDER BY r.recorded_at`, [id])).map(joinRead);
 
+// ---------- links (per installation: Bitbucket workspace, Confluence installation, demo runner) ----------
+const getLink = target => one("SELECT * FROM links WHERE target = ?", [target]);
+const listLinks = () => query("SELECT target, state, partner_name, created_at, linked_at FROM links ORDER BY target", []);
+async function putLink({ target, secret, state, partner_url = null, partner_name = null }) {
+  await exec(`INSERT INTO links (target, secret, state, partner_url, partner_name, linked_at) VALUES (?, ?, ?, ?, ?, ?)
+    ON DUPLICATE KEY UPDATE secret = VALUES(secret), state = VALUES(state), partner_url = VALUES(partner_url),
+      partner_name = VALUES(partner_name), linked_at = VALUES(linked_at), created_at = ${NOW}`,
+  [target, secret, state, partner_url, partner_name, state === "linked" ? nowTs() : null]);
+}
+async function completeLink(target, { partner_url = null, partner_name = null }) {
+  const r = await exec(`UPDATE links SET state = 'linked', partner_url = ?, partner_name = ?, linked_at = ? WHERE target = ?`,
+    [partner_url, partner_name, nowTs(), target]);
+  return r.affectedRows > 0;
+}
+const deleteLink = target => exec("DELETE FROM links WHERE target = ?", [target]);
+
 module.exports = {
+  claimOnce, pruneSeen, recordsForAgent, itemsByKeys, prsForItems, signalsForItems, readsForItems, setExcused, getLink, listLinks, putLink, completeLink, deleteLink,
   normAccount, getSettings, setSetting, seen, markSeen, storedAccounts, eraseAccount, ERASED,
   listAgents, getAgent, upsertAgent, setSuspended, addAccount, removeAccount, accounts, agentForAccount, agentBitbucketAccounts,
   upsertShape, getShape, listShapes,

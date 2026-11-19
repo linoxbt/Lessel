@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { Git, GitError, scrub, branchName } from "../src/git.js";
 import { confine, makeTools } from "../src/agent.js";
+import { sandboxIdentity } from "../src/sandbox.js";
 import { handleRpc, STATE, ERR } from "../src/a2a.js";
 import { TaskStore } from "../src/store.js";
 import { workOn } from "../src/work.js";
@@ -19,10 +20,14 @@ test("credentials never reach argv, URLs or error text", async () => {
   assert.equal(scrub("Authorization: Basic c2VjcmV0"), "Authorization: Basic ***");
   const g = new Git({ dir: path.join(tmp("lessel-git-"), "wc"), remoteUrl: "https://127.0.0.1:1/w/r.git",
     authHeader: "Authorization: Basic U0VDUkVUVE9LRU4=", mainBranch: "main", authorName: "a", authorEmail: "a@x" });
-  const env = g.env();
-  assert.equal(env.GIT_CONFIG_KEY_1, "http.https://127.0.0.1:1/.extraHeader", "header scoped to the remote's origin");
-  await assert.rejects(g.startBranch("PAY-1-x"), e => e instanceof GitError && !/U0VDUkVUVE9LRU4|SECRET/.test(e.message));
-  assert.throws(() => branchName("PAY-1; rm -rf /", "x"), /Not a Jira issue key/);
+  const env = g.env({ network: true });
+  assert.equal(env.GIT_CONFIG_KEY_0, "http.https://127.0.0.1:1/.extraHeader", "header scoped to the remote's origin");
+  assert.equal(g.env().GIT_CONFIG_COUNT, "0", "local commands get no credential");
+  await assert.rejects(g.startBranch("lessel/brook/PAY-1"), e => e instanceof GitError && !/U0VDUkVUVE9LRU4|SECRET/.test(e.message));
+  assert.throws(() => branchName("brook", "PAY-1; rm -rf /"), /Not a Jira issue key/);
+  assert.throws(() => branchName("../x", "PAY-1"), /Not an agent id/);
+  assert.equal(branchName("brook", "PAY-1"), "lessel/brook/PAY-1");
+  assert.notEqual(branchName("brook", "PAY-1"), branchName("atlas", "PAY-1"), "two agents never share a branch");
 });
 
 test("confine refuses dangling symlinks, links into .git, and node_modules", async () => {
@@ -46,6 +51,8 @@ test("tests run without the runner's secrets in their environment", async () => 
     name: "svc", version: "1.0.0", private: true,
     scripts: { test: "node -e \"console.log('SEEN=' + (process.env.FORTYTWO_API_KEY || 'none'))\"" } }));
   process.env.FORTYTWO_API_KEY = "sk-ft-v1-should-not-leak";
+  // Off root there's no sandbox user and tests are refused; opt in here so the env check still runs.
+  if (!sandboxIdentity()) process.env.RUNNER_ALLOW_UNSANDBOXED_TESTS = "1";
   try {
     const result = { testsRun: [] };
     const tools = Object.fromEntries(makeTools({ root, readPage: null, result }).map(t => [t.name, t]));
@@ -85,6 +92,8 @@ test("a restart marks in-flight tasks failed instead of WORKING forever", async 
   assert.equal(store.get("t2").status.state, STATE.COMPLETED);
 });
 
+const finished = (extra = {}) => ({ summary: "Do it", finished: true, testsRun: [], changedPaths: new Set(["a.sql"]), ...extra });
+
 function fakeDeps(overrides = {}) {
   const calls = [];
   return { calls, deps: {
@@ -95,7 +104,7 @@ function fakeDeps(overrides = {}) {
     lessel: { declareContext: async () => "Recorded." },
     bitbucket: { openPullRequest: async () => { calls.push("pr"); return { id: 1, url: null }; } },
     comment: async text => { calls.push(`comment ${text.slice(0, 40)}`); },
-    runAgent: async ({ readPage }) => { await readPage("https://x/wiki/spaces/ENG/pages/1/R"); return { summary: "Do it", testsRun: [] }; },
+    runAgent: async ({ readPage }) => { await readPage("https://x/wiki/spaces/ENG/pages/1/R"); return finished(); },
     log: { warn() {}, error() {} },
     ...overrides,
   } };
@@ -109,7 +118,7 @@ test("cancel while queued does nothing; cancel mid-run opens no PR", async () =>
   assert.deepEqual(f.calls, []);
 
   const task = { id: "t2", status: {} };
-  f = fakeDeps({ runAgent: async () => { task.cancelRequested = true; return { summary: "Do it", testsRun: [] }; } });
+  f = fakeDeps({ runAgent: async () => { task.cancelRequested = true; return finished(); } });
   await workOn(task, inv, agent, f.deps);
   assert.ok(!f.calls.includes("push") && !f.calls.includes("pr"), f.calls.join(", "));
 });

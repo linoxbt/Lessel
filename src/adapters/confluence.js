@@ -76,20 +76,39 @@ async function addFooterComment(pageId, storage) {
   });
   return readJson(res, "footer comment");
 }
-/** Restrict reading to one group (the quarantine reviewers). */
-async function restrictRead(pageId, group) {
+/** The page's read and update restrictions: { read: { users, groups }, update: { users, groups } }. */
+async function getRestrictions(pageId) {
   const { route } = api();
+  const body = await get(route`/wiki/rest/api/content/${pageId}/restriction?expand=restrictions.user,restrictions.group`);
+  const out = { read: { users: [], groups: [] }, update: { users: [], groups: [] } };
+  for (const r of body?.results ?? []) {
+    if (!out[r.operation]) continue;
+    out[r.operation].users = (r.restrictions?.user?.results ?? []).map(u => u.accountId).filter(Boolean);
+    out[r.operation].groups = (r.restrictions?.group?.results ?? []).map(g => g.name).filter(Boolean);
+  }
+  return out;
+}
+/** Replace the page's read and update restrictions with exactly these (empty lists mean unrestricted). */
+async function setRestrictions(pageId, { read = { users: [], groups: [] }, update = { users: [], groups: [] } }) {
+  const { route } = api();
+  const op = (operation, r) => ({ operation, restrictions: {
+    user: (r?.users ?? []).map(accountId => ({ type: "known", accountId })),
+    group: (r?.groups ?? []).map(name => ({ type: "group", name })) } });
   const res = await api().asApp().requestConfluence(route`/wiki/rest/api/content/${pageId}/restriction`, {
     method: "PUT", headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify([{ operation: "read", restrictions: { group: [{ type: "group", name: group }] } }]),
+    body: JSON.stringify([op("read", read), op("update", update)]),
   });
-  return readJson(res, "restrict page");
+  return readJson(res, "set restrictions");
 }
-async function clearRestrictions(pageId) {
+/** Can this account do `operation` ("read" | "update") on the page? */
+async function canUser(pageId, accountId, operation = "read") {
   const { route } = api();
-  const res = await api().asApp().requestConfluence(route`/wiki/rest/api/content/${pageId}/restriction`, { method: "DELETE" });
-  if (res.status === 404) return null;
-  return readJson(res, "clear restrictions");
+  const res = await api().asApp().requestConfluence(route`/wiki/rest/api/content/${pageId}/permission/check`, {
+    method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ subject: { type: "user", identifier: accountId }, operation }),
+  });
+  if (res.status === 404) return false;
+  return !!(await readJson(res, "permission check"))?.hasPermission;
 }
 
 async function getSpace(spaceId) {
@@ -115,4 +134,4 @@ function tinyLinkPageId(s) {
 }
 
 module.exports = { getPage, updatePage, listVersions, versionAt, getSpace, pageIdFromUrl,
-  addLabel, removeLabel, addFooterComment, restrictRead, clearRestrictions };
+  addLabel, removeLabel, addFooterComment, getRestrictions, setRestrictions, canUser };

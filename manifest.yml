@@ -52,6 +52,7 @@ modules:
 
   # Bitbucket events and the merge check arrive from the Lessel for Bitbucket app (bitbucket-app/) through this
   # web trigger: Forge apps can't hold site and workspace scopes together. Requests are HMAC-signed.
+  # Also the endpoint for Lessel's Confluence installation and the demo runner; each signs with its own link.
   webtrigger:
     - key: bitbucket-bridge
       function: bitbucketBridge
@@ -81,6 +82,15 @@ modules:
       title: Lessel
       icon: https://developer.atlassian.com/platform/forge/images/icons/issue-panel-icon.svg
       resource: panel
+      render: native
+      resolver:
+        function: uiResolver
+
+  # Lessel's Confluence installation: pair it with the Jira installation that holds Lessel's data.
+  confluence:globalSettings:
+    - key: lessel-confluence-link
+      title: Lessel
+      resource: confluence-settings
       render: native
       resolver:
         function: uiResolver
@@ -263,6 +273,8 @@ resources:
     path: src/frontend/panel.jsx
   - key: admin
     path: src/frontend/admin.jsx
+  - key: confluence-settings
+    path: src/frontend/confluence-settings.jsx
 
 permissions:
   external:
@@ -272,10 +284,8 @@ permissions:
         # Remove this entry (and use provider "forge") to restore Runs on Atlassian eligibility.
         - address: https://api.fortytwo.network
           inScopeEUD: true
-        # Bitbucket REST with an API token (PRs, diffstats, statuses, PR notices).
-        - address: https://api.bitbucket.org
-          inScopeEUD: true
-        # Lessel's own bitbucket-bridge web trigger: the Confluence installation forwards events to the Jira one.
+        # Forge web triggers of paired installations only (addresses come from pairing, stored per installation):
+        # Lessel for Bitbucket's proxy (Bitbucket REST) and, from Confluence, Lessel's own Jira installation.
         - address: "*.hello.atlassian-dev.net"
           inScopeEUD: true
   scopes:
@@ -288,6 +298,8 @@ permissions:
     - write:page:confluence
     - write:confluence-content # quarantine: labels and read restrictions
     - write:comment:confluence # quarantine: footer comment
+    - read:confluence-content.permission # Clean Room: can this agent or person view/edit the page?
+    - read:confluence-user     # Confluence settings page: is the caller a Confluence admin?
     - read:graph:issue:jira
     - read:graph:commit:external
     - read:graph:pull-request:external

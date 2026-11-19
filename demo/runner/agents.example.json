@@ -5,6 +5,8 @@
   "lesselMcpUrl": "https://mcp.atlassian.com/forge/<Lessel app id>",
   "repo": { "workspace": "<bitbucket workspace slug>", "slug": "ledger-service", "mainBranch": "main" },
   "dataDir": "data",
+  "projectKeys": ["PAY"],
+  "taskDeadlineMinutes": 20,
   "llm": { "baseUrl": "https://api.fortytwo.network/v1", "model": "qwen/qwen3.8-27b", "apiKeyEnv": "FORTYTWO_API_KEY" },
   "agents": {
     "brook": {

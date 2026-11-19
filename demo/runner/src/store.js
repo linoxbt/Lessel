@@ -19,6 +19,7 @@ export class TaskStore {
             t.status = { state: "TASK_STATE_FAILED", timestamp: new Date().toISOString(),
               message: { role: "ROLE_AGENT", parts: [{ text: "The runner restarted before this finished. Reassign the work item to retry." }],
                 messageId: `restart-${t.id}`, taskId: t.id, contextId: t.contextId } };
+            t.metadata = { ...(t.metadata ?? {}), retryable: true };   // the poller may pick it up again
           }
           this.tasks.set(t.id, t);
         }
@@ -43,6 +44,10 @@ export class TaskStore {
       if (t.agentId === agentId && t.metadata?.issueKey === issueKey && !TERMINAL.has(t.status?.state)) return t;
     }
     return null;
+  }
+  /** Every task for this agent and work item, oldest first (the poller's retry bookkeeping). */
+  tasksFor(agentId, issueKey) {
+    return [...this.tasks.values()].filter(t => t.agentId === agentId && t.metadata?.issueKey === issueKey);
   }
   persistSoon() {
     if (!this.file || this.timer) return;

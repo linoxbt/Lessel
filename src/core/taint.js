@@ -15,13 +15,20 @@ const DISABLE_CHECKS = [
   /\b(?:rate[ _-]?limits?|max_rps|rps|max_requests)\b[^.\n]{0,30}\b(?:to|=|:)\s*0\b/i,
 ];
 
-const NEGATED = /\b(?:never(?! ?mind)|don'?t|do not|must not|mustn'?t|should not|shouldn'?t|cannot|can'?t|avoid|no one should)\b/i;
+// "Don't forget to…", "never hesitate to…" are instructions, not negations.
+const NOT_REALLY = String.raw`(?!\s+(?:forget|hesitate|fail|miss)\b)`;
+const NEGATED = new RegExp(String.raw`\b(?:never(?! ?mind)${NOT_REALLY}|don'?t${NOT_REALLY}|do not${NOT_REALLY}|must not|mustn'?t|should not|shouldn'?t|cannot|can'?t|avoid|no one should)\b`, "i");
 
-const HIDDEN_STYLE = /style\s*=\s*"[^"]*(?:color\s*:\s*(?:#fff(?:fff)?\b|white|rgba?\([^)]*,\s*0\))|font-size\s*:\s*0(?:px|pt|em)?\b|display\s*:\s*none|visibility\s*:\s*hidden|opacity\s*:\s*0(?:\.0+)?\b)[^"]*"/i;
+const HIDING = String.raw`(?:color\s*:\s*(?:#fff(?:fff)?\b|white|rgba?\([^)]*,\s*0\))|font-size\s*:\s*0(?:px|pt|em)?\b|display\s*:\s*none|visibility\s*:\s*hidden|opacity\s*:\s*0(?:\.0+)?\b)`;
+// Either quote style: style="…" or style='…'.
+const HIDDEN_STYLE = new RegExp(String.raw`style\s*=\s*(?:"[^"]*${HIDING}[^"]*"|'[^']*${HIDING}[^']*')`, "i");
 const BASE64 = /[A-Za-z0-9+/]{200,}={0,2}/;
 const URL = /\bhttps?:\/\/([a-z0-9.-]+)/gi;
 
-const stripTags = s => s.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+// Inline tags join words ("dis<b></b>able"); block tags and breaks separate them.
+const stripTags = s => s.replace(/<\/?(?:p|div|br|li|ul|ol|tr|td|th|h[1-6]|table|blockquote|pre)\b[^>]*>/gi, " ")
+  .replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+  .replace(/\s+/g, " ").trim();
 
 function quoteAround(text, index, len) {
   const start = Math.max(0, index - 80);
@@ -50,14 +57,16 @@ function scan(body, { allowedDomains = [] } = {}) {
   const zw = text.search(ZERO_WIDTH);
   if (zw !== -1) add("hidden", zw, 1);
 
-  const plainIdx = (re) => { const m = text.match(re); return m ? [m.index, m[0].length] : null; };
-  for (const re of AI_ADDRESSED) { const h = plainIdx(re); if (h) { add("ai-addressed", ...h); break; } }
-  // A negated instruction ("Never set max_rps to 0", "Do not skip the tests") is a safety rule, not an attack.
+  // Instruction filters read the text a person (or an agent) sees, so markup can't split a phrase apart
+  // ("dis<b></b>able the checks"). Offsets of these findings point into that plain text.
   const plain = stripTags(text);
-  const disable = DISABLE_CHECKS.some(re => [...plain.matchAll(new RegExp(re.source, "gi"))].some(m => !NEGATED.test(
-    plain.slice(Math.max(0, m.index - 40), m.index).split(/[.!?:;\n]/).pop())));
-  if (disable) for (const re of DISABLE_CHECKS) { const h = plainIdx(re); if (h) { add("disable-checks", ...h); break; } }
-  const b64 = plainIdx(BASE64); if (b64) add("base64", ...b64);
+  const addPlain = (filter, m) => findings.push({ filter, offset: m.index, quote: plain.slice(Math.max(0, m.index - 80), m.index + m[0].length + 120).slice(0, 400) });
+  for (const re of AI_ADDRESSED) { const m = plain.match(re); if (m) { addPlain("ai-addressed", m); break; } }
+  // A negated instruction ("Never set max_rps to 0", "Do not skip the tests") is a safety rule, not an attack.
+  const live = DISABLE_CHECKS.flatMap(re => [...plain.matchAll(new RegExp(re.source, "gi"))]).find(m => !NEGATED.test(
+    plain.slice(Math.max(0, m.index - 40), m.index).split(/[.!?:;\n]/).pop()));
+  if (live) addPlain("disable-checks", live);
+  const b64 = plain.match(BASE64); if (b64) addPlain("base64", b64);
 
   for (const m of text.matchAll(URL)) if (!hostAllowed(m[1], allowedDomains)) add("link", m.index, m[0].length);
 

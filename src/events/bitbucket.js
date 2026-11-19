@@ -13,12 +13,21 @@ const { afterItemChange, maybeExcuse } = require("../services/signals");
 
 const repoCfg = (cfg, repoUuid) => cfg.repos?.[normUuid(repoUuid)] ?? {};
 const prState = s => ({ OPEN: "open", MERGED: "merged", DECLINED: "declined", SUPERSEDED: "declined" }[s] ?? "open");
+/**
+ * A merge counts as shipped work only when it lands on the repository's main branch (audit B2): merging into a
+ * side branch would otherwise let an agent build a clean record. Such PRs are stored as "side-merged".
+ */
+function storedState(pr, rc) {
+  const st = prState(pr.state);
+  const dest = pr.destination?.branch?.name;
+  return st === "merged" && dest && dest !== (rc.mainBranch || "main") ? "side-merged" : st;
+}
 
 /** Riskiest shape among an item's PRs (open or merged). */
 function riskiestShape(prs, fallback) {
   let cls = null, service = null, by = null;
   for (const p of prs) {
-    if (!p.shape_id) continue;
+    if (!p.shape_id || p.state === "declined" || p.state === "side-merged") continue;
     const [s, c] = p.shape_id.split("/");
     const r = riskier(cls, c);
     if (r !== cls) { cls = r; service = s; by = p.classified_by; }
@@ -55,19 +64,30 @@ async function onPullRequest(ws, repoUuid, prId, cfg) {
   if (!item) return null;
   const rc = repoCfg(cfg, repoUuid);
 
-  const issue = await ports.jira.getIssue(key, ["summary", "description"]).catch(() => null);
+  const issue = await ports.jira.getIssue(key, ["summary", "description", "components"]).catch(() => null);
   const { paths, lines } = await ports.bitbucket.prDiffstat(ws, repoUuid, prId);
-  const shape = await finalShapeForPaths({ paths, summary: issue?.fields?.summary,
-    description: adfText(issue?.fields?.description), repoDefaultService: rc.defaultService }, cfg);
-  const state = prState(pr.state);
+  // No path match: the ticket's (Compass) component if it names a known service, then the repo default (§9.1).
+  const componentService = (issue?.fields?.components ?? []).map(c => c?.name).find(n => cfg.servicePaths.some(r => r.service === n));
+  let shape = await finalShapeForPaths({ paths, summary: issue?.fields?.summary,
+    description: adfText(issue?.fields?.description), repoDefaultService: componentService ?? rc.defaultService }, cfg);
+  const existing = await repo.getPrRow(normUuid(repoUuid), pr.id);
+  // A person confirmed or chose this PR's shape: a later AI guess doesn't replace it.
+  if (shape.classified_by === "llm" && existing?.classified_by === "manual") shape = { shape_id: existing.shape_id, classified_by: "manual" };
+  const state = storedState(pr, rc);
   await repo.upsertPr({ repo_uuid: normUuid(repoUuid), pr_id: pr.id, workspace_uuid: normUuid(ws), issue_key: key,
     agent_id: agent?.agent_id ?? null, state, head_commit: pr.source?.commit?.hash ?? null,
     merge_commit: pr.merge_commit?.hash ?? null, shape_id: shape.shape_id, shape_head: pr.source?.commit?.hash ?? null,
-    classified_by: shape.classified_by });
+    classified_by: shape.classified_by,
+    // Remembered from the first time Lessel saw the PR: was its author assigned to the item then? (gate, B3)
+    opened_by_assignee: agent ? (item.assigned_agent_id === agent.agent_id ? 1 : 0) : null });
 
   const prs = await repo.prsForItem(key);
   const patch = { repo_uuid: normUuid(repoUuid), size_lines: lines };
-  if (item.shape_state !== "frozen") Object.assign(patch, riskiestShape(prs, {}), { shape_state: "final" });
+  if (item.shape_state !== "frozen") {
+    const riskiest = riskiestShape(prs, {});
+    const keepManual = item.classified_by === "manual" && riskiest.classified_by === "llm";
+    Object.assign(patch, keepManual ? {} : riskiest, { shape_state: "final" });
+  }
 
   // Once the window has opened (shape frozen), later PRs on the same key — fix-forwards, Bitbucket's own
   // "Revert …" PRs — are recorded but can't change who the outcome belongs to or its shape.
@@ -92,7 +112,8 @@ async function onPullRequest(ws, repoUuid, prId, cfg) {
 async function onPush(ws, repoUuid, heads, cfg) {
   const found = [];
   for (const head of heads) {
-    const commits = await ports.bitbucket.commitsOn(ws, repoUuid, head, { max: 1 });
+    // A push can carry several commits; a revert needn't be the newest one.
+    const commits = await ports.bitbucket.commitsOn(ws, repoUuid, head, { max: 10 });
     for (const c of commits) {
       const sha = revertedSha(c.message);
       if (!sha) continue;

@@ -145,6 +145,29 @@ const MIGRATIONS = [
     read_at        TIMESTAMP(3) NOT NULL,
     recorded_at    TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3))`],
   ["v001_context_reads_idx", `CREATE INDEX idx_reads_issue ON context_reads (issue_key)`],
+  // v002 (audit fixes): per-installation links, taint episodes, excusal source, PR assignment at open, indexes.
+  ["v002_links", `CREATE TABLE IF NOT EXISTS links (
+    target       VARCHAR(16) PRIMARY KEY,
+    secret       VARCHAR(128) NOT NULL,
+    state        VARCHAR(12) NOT NULL,
+    partner_url  VARCHAR(512),
+    partner_name VARCHAR(128),
+    created_at   TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
+    linked_at    TIMESTAMP(3) NULL)`],
+  ["v002_sources_past_ranges", `ALTER TABLE sources ADD COLUMN past_ranges VARCHAR(1024) NULL`],
+  ["v002_sources_saved_restrictions", `ALTER TABLE sources ADD COLUMN saved_restrictions VARCHAR(4096) NULL`],
+  ["v002_signals_excused_source", `ALTER TABLE signals ADD COLUMN excused_source VARCHAR(128) NULL`],
+  ["v002_prs_opened_by_assignee", `ALTER TABLE prs ADD COLUMN opened_by_assignee TINYINT NULL`],
+  ["v002_idx_holds", `CREATE INDEX idx_holds_agent_shape ON holds (agent_id, shape_id)`],
+  ["v002_idx_signals_causality", `CREATE INDEX idx_signals_causality ON signals (causality)`],
+  ["v002_idx_signals_via", `CREATE INDEX idx_signals_via ON signals (confirmed_via)`],
+  ["v002_idx_reads_source", `CREATE INDEX idx_reads_source ON context_reads (source_id)`],
+  ["v002_idx_findings_source", `CREATE INDEX idx_findings_source ON scan_findings (source_id)`],
+  ["v002_idx_items_outcome", `CREATE INDEX idx_items_outcome_window ON work_items (outcome, window_ends)`],
+  ["v002_idx_items_repo", `CREATE INDEX idx_items_repo ON work_items (repo_uuid)`],
+  ["v002_idx_items_kind_shape", `CREATE INDEX idx_items_kind_shape ON work_items (actor_kind, shape_id)`],
+  ["v002_idx_decisions", `CREATE INDEX idx_decisions_agent_shape ON decision_events (agent_id, shape_id, at)`],
+  ["v002_idx_events_seen", `CREATE INDEX idx_events_seen_at ON events_seen (seen_at)`],
 ];
 
 /** Forge: run through @forge/sql's migrationRunner, which records what's been applied. */

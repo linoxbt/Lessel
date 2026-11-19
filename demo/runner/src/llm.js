@@ -1,4 +1,4 @@
-// OpenAI-compatible chat client. Default: Qwen (qwen/qwen3.8-27b) on Fortytwo, https://api.fortytwo.network/v1.
+// OpenAI-compatible chat client. Default endpoint: Fortytwo, https://api.fortytwo.network/v1 (model in DEFAULT_LLM).
 // Any OpenAI-compatible endpoint works (DashScope, Hugging Face router, OpenRouter, a local server).
 //
 // Fortytwo's error envelope: { error: { code, type, param, message }, request_id }.
@@ -27,7 +27,11 @@ export function isRetryable(status, code) {
   return status >= 500 && status < 600;
 }
 
-const sleep = ms => new Promise(r => setTimeout(r, ms));
+// Ends early when the task is aborted, so a long Retry-After never outlives a cancel.
+const sleep = (ms, signal) => new Promise(r => {
+  const t = setTimeout(r, ms);
+  signal?.addEventListener("abort", () => { clearTimeout(t); r(); }, { once: true });
+});
 
 export class ChatClient {
   constructor({ baseUrl = DEFAULT_LLM.baseUrl, apiKey, model = DEFAULT_LLM.model, fetchFn = fetch,
@@ -36,10 +40,16 @@ export class ChatClient {
     Object.assign(this, { baseUrl: baseUrl.replace(/\/$/, ""), apiKey, model, fetchFn, maxRetries, timeoutMs, sleepFn });
   }
 
-  /** POST /chat/completions with retries. Returns the parsed response. */
-  async complete(body) {
+  /**
+   * POST /chat/completions with retries. Returns the parsed response.
+   * signal (optional): the task's abort signal (cancel or deadline). It ends the request at once and is never
+   * retried; its reason is rethrown so the caller can tell a cancel from a deadline.
+   */
+  async complete(body, { signal } = {}) {
     let attempt = 0;
+    const stopIfAborted = () => { if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : new LlmError(0, "aborted", "aborted"); };
     for (;;) {
+      stopIfAborted();
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), this.timeoutMs);
       let res, text;
@@ -48,12 +58,13 @@ export class ChatClient {
           method: "POST",
           headers: { authorization: `Bearer ${this.apiKey}`, "content-type": "application/json" },
           body: JSON.stringify({ model: this.model, ...body }),
-          signal: ctrl.signal,
+          signal: signal ? AbortSignal.any([ctrl.signal, signal]) : ctrl.signal,
         });
         text = await res.text();
       } catch (e) {
         clearTimeout(timer);
-        if (attempt++ < this.maxRetries) { await this.sleepFn(1000 * 2 ** attempt); continue; }
+        stopIfAborted();
+        if (attempt++ < this.maxRetries) { await this.sleepFn(1000 * 2 ** attempt, signal); continue; }
         throw new LlmError(0, "network_error", e.message);
       }
       clearTimeout(timer);
@@ -67,7 +78,7 @@ export class ChatClient {
       const message = json?.error?.message ?? text?.slice(0, 300) ?? res.statusText;
       if (isRetryable(res.status, code) && attempt++ < this.maxRetries) {
         const after = Number(res.headers.get("retry-after"));
-        await this.sleepFn(Math.min(300_000, Number.isFinite(after) && after > 0 ? after * 1000 : 1000 * 2 ** attempt));
+        await this.sleepFn(Math.min(300_000, Number.isFinite(after) && after > 0 ? after * 1000 : 1000 * 2 ** attempt), signal);
         continue;
       }
       throw new LlmError(res.status, code, message, json?.request_id);

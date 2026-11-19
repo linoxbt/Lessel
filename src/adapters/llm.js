@@ -35,12 +35,17 @@ async function forgeComplete({ system, user, maxTokens }) {
   return textOf(res.choices?.[0]?.message?.content);
 }
 
+// The endpoint and the key's variable are fixed here, never read from settings: a setting that could name
+// another variable or host would let anyone who can change settings send a secret out (audit S2).
+const QWEN_ENDPOINT = "https://api.fortytwo.network/v1/chat/completions";
+const QWEN_KEY_VAR = "FORTYTWO_API_KEY";
+
 /** Qwen via an OpenAI-compatible endpoint. fetchFn defaults to Forge's egress-aware fetch. */
 async function qwenComplete({ system, user, maxTokens, schema, schemaName }, qwen, fetchFn) {
-  const apiKey = process.env[qwen.apiKeyEnv ?? "FORTYTWO_API_KEY"];
-  if (!apiKey) throw new Error(`${qwen.apiKeyEnv ?? "FORTYTWO_API_KEY"} is not set (forge variables set --encrypt ...)`);
+  const apiKey = process.env[QWEN_KEY_VAR];
+  if (!apiKey) throw new Error(`${QWEN_KEY_VAR} is not set (forge variables set --encrypt ...)`);
   const doFetch = fetchFn ?? require("@forge/api").fetch;
-  const res = await doFetch(`${qwen.baseUrl.replace(/\/$/, "")}/chat/completions`, {
+  const res = await doFetch(QWEN_ENDPOINT, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -64,7 +69,8 @@ async function qwenComplete({ system, user, maxTokens, schema, schemaName }, qwe
 async function complete(req, cfg = DEFAULTS, { fetchFn } = {}) {
   const ai = { ...DEFAULTS.ai, ...(cfg.ai ?? {}) };
   if (ai.provider === "forge") return forgeComplete(req);
-  return qwenComplete(req, { ...DEFAULTS.ai.qwen, ...(ai.qwen ?? {}) }, fetchFn);
+  const { model, reasoningEffort } = { ...DEFAULTS.ai.qwen, ...(ai.qwen ?? {}) };
+  return qwenComplete(req, { model, reasoningEffort }, fetchFn);
 }
 
 // ---------- uses ----------
@@ -126,4 +132,4 @@ async function reviewForInjection({ title, text }, cfg = DEFAULTS, opts = {}) {
   }
 }
 
-module.exports = { classifyClass, reviewForInjection, complete, parseJson };
+module.exports = { QWEN_ENDPOINT, QWEN_KEY_VAR, classifyClass, reviewForInjection, complete, parseJson };

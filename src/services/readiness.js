@@ -67,11 +67,21 @@ async function readiness() {
   // AI provider
   const ai = { ...DEFAULTS.ai, ...(cfg.ai ?? {}) };
   if (ai.provider === "qwen") {
-    const env = ai.qwen?.apiKeyEnv ?? "FORTYTWO_API_KEY";
+    const { QWEN_KEY_VAR: env } = require("../adapters/llm");
     out.push(item("ai", "AI provider", process.env[env] ? "ok" : "warn",
-      process.env[env] ? `Qwen (${ai.qwen.model}) via ${ai.qwen.baseUrl}.` : `Qwen is selected but ${env} isn't set: run forge variables set --encrypt ${env} ...`));
+      process.env[env] ? `Qwen (${ai.qwen?.model ?? DEFAULTS.ai.qwen.model}) via Fortytwo.` : `Qwen is selected but ${env} isn't set: run forge variables set --encrypt ${env} ...`));
   } else {
     out.push(item("ai", "AI provider", "ok", "Forge LLMs (Atlassian-hosted)."));
+  }
+
+  // Links (pairing, per installation)
+  const links = await require("./link").status().catch(() => null);
+  if (links) {
+    out.push(item("linkBitbucket", "Bitbucket link", links.bitbucket.linked ? "ok" : "warn", links.bitbucket.linked
+      ? `Paired with a workspace${links.bitbucket.workspace ? ` (${links.bitbucket.workspace.slice(0, 8)}…)` : ""}.`
+      : "Not paired: create a code under Links and paste it in Bitbucket → Workspace settings → Lessel."));
+    out.push(item("linkConfluence", "Confluence link", links.confluence.linked ? "ok" : "warn", links.confluence.linked
+      ? "Confluence events reach this site." : "Not paired: create a code under Links and paste it in Confluence → Settings → Lessel."));
   }
 
   // Teamwork Graph, Clean Room scope

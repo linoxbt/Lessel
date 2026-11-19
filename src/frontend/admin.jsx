@@ -1,10 +1,9 @@
 import React, { useEffect, useState } from "react";
 import ForgeReconciler, {
-  Box, Button, ButtonGroup, DynamicTable, Heading, Inline, Label, Lozenge, SectionMessage, Select, Spinner, Stack,
-  Strong, Text, TextArea, Textfield, Toggle,
+  Box, Button, ButtonGroup, Code, DynamicTable, Heading, Inline, Label, Lozenge, SectionMessage, Select, Spinner,
+  Stack, Strong, Text, TextArea, Textfield, Toggle,
 } from "@forge/react";
-import { invoke } from "@forge/bridge";
-import { ErrorMessage } from "./shared";
+import { ErrorMessage, Loaded, call, useCall, when } from "./shared";
 
 const EDITABLE = [
   ["enforcementMode", "advisory or enforcing"],
@@ -31,17 +30,49 @@ const EDITABLE = [
   ["graphQueries", "Teamwork Graph saved-query keys (from scripts/register-graph-queries.js)"],
 ];
 
+/**
+ * One setting as JSON. The text follows the saved value: when the value changes (this editor's save, the mode
+ * switch, an import), the editor shows the new value, so saving an old editor can't silently undo a change.
+ */
 function SettingEditor({ name, help, value, onSave }) {
-  const [text, setText] = useState(JSON.stringify(value, null, 2));
-  const [bad, setBad] = useState(false);
+  const saved = JSON.stringify(value ?? null, null, 2);
+  const [text, setText] = useState(saved);
+  const [msg, setMsg] = useState(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { setText(saved); }, [saved]);
+  const save = async () => {
+    let parsed;
+    try { parsed = JSON.parse(text); } catch { setMsg({ error: "That isn't valid JSON." }); return; }
+    setBusy(true);
+    const r = await onSave(name, parsed);
+    setBusy(false);
+    setMsg(r.error ? { error: `Not saved: ${r.error}` } : { ok: "Saved." });
+  };
   return (
     <Stack space="space.050">
       <Label labelFor={name}>{name}: {help}</Label>
-      <TextArea id={name} value={text} onChange={e => { setText(e.target.value); setBad(false); }} />
-      <Inline space="space.100">
-        <Button onClick={() => { try { onSave(name, JSON.parse(text)); } catch { setBad(true); } }}>Save {name}</Button>
-        {bad ? <Text>That isn't valid JSON.</Text> : null}
+      <TextArea id={name} value={text} onChange={e => { setText(e.target.value); setMsg(null); }} />
+      <Inline space="space.100" alignBlock="center">
+        <Button isDisabled={busy || text === saved} onClick={save}>Save {name}</Button>
+        {text !== saved ? <Button appearance="subtle" isDisabled={busy} onClick={() => { setText(saved); setMsg(null); }}>Discard changes</Button> : null}
+        {msg?.ok ? <Text>{msg.ok}</Text> : null}
       </Inline>
+      {msg?.error ? <ErrorMessage error={msg.error} /> : null}
+    </Stack>
+  );
+}
+
+function Accounts({ list, act, busy }) {
+  if (!list.length) return <Text>missing</Text>;
+  return (
+    <Stack space="space.025">
+      {list.map(x => (
+        <Inline key={`${x.product}:${x.account_id}`} space="space.050" alignBlock="center">
+          <Text>{x.account_id}</Text>
+          <Button appearance="subtle" spacing="compact" isDisabled={busy}
+            onClick={() => act("removeAccount", { product: x.product, accountId: x.account_id })}>Remove</Button>
+        </Inline>
+      ))}
     </Stack>
   );
 }
@@ -49,31 +80,33 @@ function SettingEditor({ name, help, value, onSave }) {
 function Agents({ view, act }) {
   const [agent, setAgent] = useState({ agent_id: "", display_name: "" });
   const [acc, setAcc] = useState({ product: "jira", accountId: "", agentId: "" });
+  const [busy, setBusy] = useState(false);
+  const run = async (name, payload) => { setBusy(true); const r = await act(name, payload); setBusy(false); return r; };
   return (
     <Stack space="space.150">
       <DynamicTable
         head={{ cells: ["Agent", "Jira", "Bitbucket", "MCP", "Suspended"].map(c => ({ key: c, content: c })) }}
         rows={view.agents.map(a => {
-          const of = p => view.accounts.filter(x => x.agent_id === a.agent_id && x.product === p).map(x => x.account_id).join(", ") || "missing";
+          const of = p => <Accounts list={view.accounts.filter(x => x.agent_id === a.agent_id && x.product === p)} act={run} busy={busy} />;
           return { key: a.agent_id, cells: [
             { key: "Agent", content: <Strong>{a.display_name} ({a.agent_id})</Strong> },
             { key: "Jira", content: of("jira") }, { key: "Bitbucket", content: of("bitbucket") }, { key: "MCP", content: of("mcp") },
-            { key: "Suspended", content: <Toggle isChecked={!!a.suspended} onChange={() => act("setSuspended", { agentId: a.agent_id, suspended: !a.suspended })} /> },
+            { key: "Suspended", content: <Toggle isChecked={!!a.suspended} isDisabled={busy} onChange={() => run("setSuspended", { agentId: a.agent_id, suspended: !a.suspended })} /> },
           ] };
         })}
       />
       <Inline space="space.100" alignBlock="end">
         <Textfield placeholder="agent id, e.g. brook" value={agent.agent_id} onChange={e => setAgent({ ...agent, agent_id: e.target.value })} />
         <Textfield placeholder="display name" value={agent.display_name} onChange={e => setAgent({ ...agent, display_name: e.target.value })} />
-        <Button onClick={() => act("saveAgent", agent)}>Add agent</Button>
+        <Button isDisabled={busy || !agent.agent_id.trim() || !agent.display_name.trim()} onClick={() => run("saveAgent", agent)}>Add agent</Button>
       </Inline>
       <Inline space="space.100" alignBlock="end">
         <Select options={["jira", "bitbucket", "mcp"].map(p => ({ label: p, value: p }))} defaultValue={{ label: "jira", value: "jira" }} onChange={o => setAcc({ ...acc, product: o.value })} />
         <Textfield placeholder="account id or UUID" value={acc.accountId} onChange={e => setAcc({ ...acc, accountId: e.target.value })} />
         <Select options={view.agents.map(a => ({ label: a.display_name, value: a.agent_id }))} onChange={o => setAcc({ ...acc, agentId: o.value })} />
-        <Button onClick={() => act("addAccount", acc)}>Map account</Button>
+        <Button isDisabled={busy || !acc.accountId.trim() || !acc.agentId} onClick={() => run("addAccount", acc)}>Map account</Button>
       </Inline>
-      <Text>An agent usually has three accounts: the Jira user it's assigned work as, the Bitbucket account that opens PRs, and the account its MCP client signs in with.</Text>
+      <Text>An agent usually has three accounts: the Jira user it's assigned work as, the Bitbucket account that opens PRs, and the account its MCP client signs in with. Removing an account is logged.</Text>
     </Stack>
   );
 }
@@ -82,12 +115,18 @@ const STATUS = { ok: "success", warn: "moved", fail: "removed", manual: "new", i
 
 function SetupCheck() {
   const [rows, setRows] = useState(null);
+  const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
-  const run = async () => { setBusy(true); setRows(await invoke("getReadiness")); setBusy(false); };
+  const run = async () => {
+    setBusy(true);
+    const r = await call("getReadiness");
+    setBusy(false);
+    if (r.error) setError(r.error); else { setError(null); setRows(r.data); }
+  };
   return (
     <Stack space="space.100">
       <Button onClick={run} isDisabled={busy}>{busy ? "Checking…" : "Run setup check"}</Button>
-      {rows?.error ? <ErrorMessage error={rows.error} /> : null}
+      <ErrorMessage error={error} onRetry={busy ? null : run} />
       {Array.isArray(rows) ? (
         <DynamicTable
           head={{ cells: [{ key: "s", content: "Status" }, { key: "t", content: "Check" }, { key: "d", content: "Detail" }] }}
@@ -102,73 +141,253 @@ function SetupCheck() {
   );
 }
 
-function Snapshot() {
-  const [out, setOut] = useState("");
-  const [paste, setPaste] = useState("");
-  const [msg, setMsg] = useState(null);
+const JOBS = [["migrate", "Run migrations"], ["backfill", "Backfill history"], ["recompute-all", "Recompute all"]];
+
+/** Always shown, even when the rest of the page can't load: a fresh install needs "Run migrations" first. */
+function Jobs({ act }) {
+  const [busy, setBusy] = useState(null);
+  const run = async (type, label) => {
+    setBusy(type);
+    await act("runJob", { type }, `${label}: queued. Jobs run in the background; give it a minute, then reload.`);
+    setBusy(null);
+  };
   return (
     <Stack space="space.100">
-      <Text>Export copies this site's agent history without any person's account id. Import works only on a fresh install and labels the board "Imported history".</Text>
       <ButtonGroup>
-        <Button onClick={async () => { const r = await invoke("exportSnapshot"); r?.error ? setMsg(r.error) : setOut(r.json); }}>Export snapshot</Button>
-        <Button appearance="primary" isDisabled={!paste.trim()} onClick={async () => {
-          const r = await invoke("importSnapshot", { json: paste });
-          setMsg(r?.error ?? `Imported ${r.imported.work_items} work items, ${r.imported.signals} signals, ${r.imported.records} records.`);
-        }}>Import pasted snapshot</Button>
+        {JOBS.map(([type, label]) => <Button key={type} isDisabled={!!busy} onClick={() => run(type, label)}>{label}</Button>)}
       </ButtonGroup>
-      {msg ? <Text>{msg}</Text> : null}
+      <Text>Before enforcing: set the native minimum approvals on gated branches to 0, mark the Lessel check as Required (Bitbucket Premium), turn on "reset approvals when the source branch changes", and add the Lessel validator to the Ready to merge transition.</Text>
+    </Stack>
+  );
+}
+
+const LINKS = [
+  { target: "bitbucket", name: "Bitbucket", where: "Paste this in Lessel for Bitbucket → Workspace settings → Lessel." },
+  { target: "confluence", name: "Confluence", where: "Paste this in Confluence → Settings → Lessel." },
+  { target: "runner", name: "Agent runner (optional)", where: "Give this to the runner that hosts your own agents: it carries the bridge address (LESSEL_BRIDGE_URL) and its secret (LESSEL_RUNNER_SECRET). It can only report reads and ask for ticket fit, for agents registered with kind \"runner\"." },
+];
+
+/** Links from this installation (which holds Lessel's data) to Lessel for Bitbucket and Lessel in Confluence. */
+function Links() {
+  const state = useCall("linkStatus");
+  const [codes, setCodes] = useState({});
+  const [confirmUnlink, setConfirmUnlink] = useState(null);
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const create = async target => {
+    setBusy(true);
+    const r = await call("createPairingCode", { target });
+    setBusy(false);
+    if (r.error) { setError(r.error); return; }
+    setError(null);
+    setCodes(c => ({ ...c, [target]: r.data.code }));
+    if (r.data.status) state.setData(r.data.status);
+  };
+  const unlink = async target => {
+    setBusy(true);
+    const r = await call("unlink", { target });
+    setBusy(false);
+    setConfirmUnlink(null);
+    if (r.error) { setError(r.error); return; }
+    setError(null);
+    setCodes(c => ({ ...c, [target]: null }));
+    state.setData(r.data);
+  };
+  return (
+    <Stack space="space.150">
+      <Text>Lessel keeps its data in this Jira installation. Lessel for Bitbucket and Lessel's Confluence installation each link to it once, with a pairing code created here.</Text>
+      <ErrorMessage error={error} />
+      <Loaded state={state}>{status => (
+        <Stack space="space.200">
+          {LINKS.map(l => {
+            const s = status?.[l.target] ?? {};
+            return (
+              <Stack key={l.target} space="space.100">
+                <Inline space="space.100" alignBlock="center">
+                  <Strong>{l.name}</Strong>
+                  <Lozenge appearance={s.linked ? "success" : s.pending ? "moved" : "default"}>{s.linked ? "linked" : s.pending ? "waiting for the code" : "not linked"}</Lozenge>
+                  {s.linked ? <Text>{s.workspace ? `Workspace ${s.workspace}, l` : "L"}inked {when(s.linkedAt)}</Text> : null}
+                </Inline>
+                <ButtonGroup>
+                  <Button isDisabled={busy} onClick={() => create(l.target)}>{s.linked ? "Create a new pairing code" : "Create pairing code"}</Button>
+                  {s.linked || s.pending ? <Button appearance="subtle" isDisabled={busy} onClick={() => setConfirmUnlink(l.target)}>Unlink</Button> : null}
+                </ButtonGroup>
+                {confirmUnlink === l.target ? (
+                  <SectionMessage appearance="warning" title={`Unlink ${l.name}?`}>
+                    <Stack space="space.100">
+                      <Text>{l.target === "bitbucket"
+                        ? "Lessel for Bitbucket will stop getting verdicts from this site, and its merge check fails closed until you link again."
+                        : "Confluence page events will stop reaching Lessel, so the Clean Room won't see new page versions until you link again."}</Text>
+                      <ButtonGroup>
+                        <Button appearance="danger" isDisabled={busy} onClick={() => unlink(l.target)}>Unlink</Button>
+                        <Button appearance="subtle" onClick={() => setConfirmUnlink(null)}>Cancel</Button>
+                      </ButtonGroup>
+                    </Stack>
+                  </SectionMessage>
+                ) : null}
+                {codes[l.target] ? (
+                  <SectionMessage appearance="information" title={`Pairing code for ${l.name}`}>
+                    <Stack space="space.100">
+                      <Code>{codes[l.target]}</Code>
+                      <Text>{l.where}</Text>
+                    </Stack>
+                  </SectionMessage>
+                ) : null}
+              </Stack>
+            );
+          })}
+        </Stack>
+      )}</Loaded>
+    </Stack>
+  );
+}
+
+const ACTIVE = new Set(["queued", "running"]);
+
+function ImportStatus({ st }) {
+  if (!st || st.state === "none") return null;
+  if (st.state === "queued") return <Inline space="space.100" alignBlock="center"><Spinner size="small" /><Text>Import queued {when(st.queuedAt)}. It runs in the background; this updates by itself.</Text></Inline>;
+  if (st.state === "running") return <Inline space="space.100" alignBlock="center"><Spinner size="small" /><Text>Importing since {when(st.startedAt)}…</Text></Inline>;
+  if (st.state === "failed") return <ErrorMessage error={`The import failed${st.finishedAt ? ` (${when(st.finishedAt)})` : ""}: ${st.error ?? "unknown error"}`} />;
+  const n = st.imported ?? {};
+  return (
+    <SectionMessage appearance="success" title="History imported">
+      <Text>
+        Imported {n.work_items ?? 0} work items, {n.signals ?? 0} signals and {n.records ?? 0} records ({when(st.finishedAt)}).
+        {st.keyPrefix ? ` Imported keys start with ${st.keyPrefix} (PAY-212 became ${st.keyPrefix}PAY-212).` : ""} Open any project's Lessel page to see them.
+      </Text>
+    </SectionMessage>
+  );
+}
+
+function Snapshot({ onImported }) {
+  const status = useCall("importStatus");
+  const [out, setOut] = useState("");
+  const [paste, setPaste] = useState("");
+  const [prefix, setPrefix] = useState("DEMO");
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [watching, setWatching] = useState(false);
+  const st = status.data;
+  const active = !!st && ACTIVE.has(st.state);
+
+  // Poll while an import is queued or running.
+  useEffect(() => {
+    if (!active || status.loading) return undefined;
+    const t = setTimeout(status.retry, 3000);
+    return () => clearTimeout(t);
+  }, [active, status.loading, st]);
+  // The import changed settings (mode, imported banner): reload them once it's done.
+  useEffect(() => {
+    if (watching && st && !ACTIVE.has(st.state)) { setWatching(false); if (st.state === "done") onImported(); }
+  }, [watching, st]);
+
+  const doExport = async () => {
+    setBusy(true);
+    const r = await call("exportSnapshot");
+    setBusy(false);
+    if (r.error) setError(r.error); else { setError(null); setOut(r.data.json); }
+  };
+  const doImport = async () => {
+    setBusy(true);
+    const r = await call("importSnapshot", { json: paste, keyPrefix: prefix.trim() });
+    setBusy(false);
+    if (r.error) { setError(r.error); return; }
+    setError(null);
+    setPaste("");
+    setWatching(true);
+    status.setData(r.data);
+  };
+  return (
+    <Stack space="space.100">
+      <Text>Export copies this site's agent history without any account id (no person's, and no agent's: only agent names). Import works only on a fresh install, runs in the background, and labels the board "Imported history". Imported work items get a key prefix so they never clash with this site's own tickets, and imported pull requests are never looked up in Bitbucket.</Text>
+      <ErrorMessage error={error} />
+      {status.error ? <ErrorMessage error={`Couldn't read the import status: ${status.error}`} onRetry={status.retry} /> : null}
+      <ImportStatus st={st} />
+      <ButtonGroup>
+        <Button isDisabled={busy} onClick={doExport}>Export snapshot</Button>
+      </ButtonGroup>
       {out ? <TextArea value={out} isReadOnly /> : null}
       <TextArea placeholder="Paste a snapshot here to import it" value={paste} onChange={e => setPaste(e.target.value)} />
+      <Inline space="space.100" alignBlock="end">
+        <Stack space="space.025">
+          <Label labelFor="lessel-key-prefix">Key prefix for imported work items</Label>
+          <Textfield id="lessel-key-prefix" value={prefix} onChange={e => setPrefix(e.target.value.toUpperCase())} />
+        </Stack>
+        <Button appearance="primary" isDisabled={busy || active || !paste.trim() || !/^[A-Z]{2,8}$/.test(prefix.trim())} onClick={doImport}>Import pasted snapshot</Button>
+      </Inline>
     </Stack>
   );
 }
 
 function App() {
-  const [view, setView] = useState(null);
+  const settings = useCall("getSettings");
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
-  const act = async (name, payload) => {
-    const r = await invoke(name, payload);
-    if (r?.error) setError(r.error); else { setError(null); if (r?.settings) setView(r); else setNotice(`${name}: queued`); }
+  /** Run an admin action; a result with settings in it refreshes the page. */
+  const act = async (name, payload, doneText) => {
+    const r = await call(name, payload);
+    if (r.error) { setError(r.error); setNotice(null); return r; }
+    setError(null);
+    if (r.data?.settings) settings.setData(r.data);
+    if (doneText) setNotice(doneText);
+    return r;
   };
-  useEffect(() => { invoke("getSettings").then(r => (r?.error ? setError(r.error) : setView(r))); }, []);
-  if (!view) return error ? <ErrorMessage error={error} /> : <Spinner />;
-  const s = view.settings;
+  /** Saving one setting: its error shows next to its editor, not at the top. */
+  const save = async (key, value) => {
+    const r = await call("saveSetting", { key, value });
+    if (!r.error && r.data?.settings) settings.setData(r.data);
+    return r;
+  };
+  const view = settings.data;
+  const s = view?.settings;
   return (
     <Stack space="space.300">
       <SectionMessage appearance="information" title="People are never scored">
-        <Text>Lessel scores AI agents per kind of task. Human work only appears as an aggregate team baseline, shown when at least {s.teamBaseline.minContributors} people contributed. Person IDs appear only in the audit trail of staff actions.</Text>
+        <Text>Lessel scores AI agents per kind of task. Human work only appears as an aggregate team baseline, shown when at least {s?.teamBaseline?.minContributors ?? 3} people contributed. Person IDs appear only in the audit trail of staff actions.</Text>
       </SectionMessage>
       <ErrorMessage error={error} />
       {notice ? <SectionMessage appearance="success"><Text>{notice}</Text></SectionMessage> : null}
-      <Inline space="space.100" alignBlock="center">
-        <Text>Mode:</Text>
-        <Lozenge appearance={s.enforcementMode === "enforcing" ? "success" : "moved"} isBold>{s.enforcementMode}</Lozenge>
-        <Button onClick={() => act("saveSetting", { key: "enforcementMode", value: s.enforcementMode === "enforcing" ? "advisory" : "enforcing" })}>
-          Switch to {s.enforcementMode === "enforcing" ? "advisory" : "enforcing"}
-        </Button>
-      </Inline>
-      <Heading as="h3">Setup check</Heading>
-      <SetupCheck />
-      <Heading as="h3">Agents</Heading>
-      <Agents view={view} act={act} />
-      <Heading as="h3">Jobs</Heading>
-      <ButtonGroup>
-        <Button onClick={() => act("runJob", { type: "migrate" })}>Run migrations</Button>
-        <Button onClick={() => act("runJob", { type: "backfill" })}>Backfill history</Button>
-        <Button onClick={() => act("runJob", { type: "recompute-all" })}>Recompute all</Button>
-      </ButtonGroup>
-      <Text>Before enforcing: set the native minimum approvals on gated branches to 0, mark the Lessel check as Required (Bitbucket Premium), turn on "reset approvals when the source branch changes", and add the Lessel validator to the Ready to merge transition.</Text>
-      <Heading as="h3">History snapshot (for judges)</Heading>
-      <Snapshot act={act} />
-      <Heading as="h3">Settings</Heading>
-      <Box>
-        <Stack space="space.200">
-          {EDITABLE.map(([name, help]) => (
-            <SettingEditor key={name} name={name} help={help} value={s[name]} onSave={(key, value) => act("saveSetting", { key, value })} />
-          ))}
+      {!view ? (
+        settings.error ? (
+          <ErrorMessage
+            error={`Lessel's settings couldn't be loaded: ${settings.error} If Lessel was just installed and its tables are missing, click Run migrations under Jobs below, wait a minute, then retry.`}
+            onRetry={settings.retry} />
+        ) : <Spinner />
+      ) : (
+        <Stack space="space.300">
+          <ErrorMessage error={settings.error} onRetry={settings.retry} />
+          <Inline space="space.100" alignBlock="center">
+            <Text>Mode:</Text>
+            <Lozenge appearance={s.enforcementMode === "enforcing" ? "success" : "moved"} isBold>{s.enforcementMode}</Lozenge>
+            <Button onClick={() => act("saveSetting", { key: "enforcementMode", value: s.enforcementMode === "enforcing" ? "advisory" : "enforcing" })}>
+              Switch to {s.enforcementMode === "enforcing" ? "advisory" : "enforcing"}
+            </Button>
+          </Inline>
+          <Heading as="h3">Setup check</Heading>
+          <SetupCheck />
+          <Heading as="h3">Agents</Heading>
+          <Agents view={view} act={act} />
         </Stack>
-      </Box>
+      )}
+      <Heading as="h3">Jobs</Heading>
+      <Jobs act={act} />
+      <Heading as="h3">Links</Heading>
+      <Links />
+      <Heading as="h3">History snapshot (for judges)</Heading>
+      <Snapshot onImported={settings.retry} />
+      {view ? (
+        <Stack space="space.200">
+          <Heading as="h3">Settings</Heading>
+          <Box>
+            <Stack space="space.200">
+              {EDITABLE.map(([name, help]) => (
+                <SettingEditor key={name} name={name} help={help} value={s[name]} onSave={save} />
+              ))}
+            </Stack>
+          </Box>
+        </Stack>
+      ) : null}
     </Stack>
   );
 }

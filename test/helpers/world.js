@@ -47,6 +47,8 @@ function makeWorld() {
   const issues = new Map();         // key → issue
   const links = new Map();          // id → link
   const pages = new Map();          // pageId → [{ number, createdAt, title, body, spaceId }]
+  const restrictions = new Map();   // pageId → { read: { users, groups }, update: { users, groups } }
+  const denied = new Set();         // `${pageId}:${accountId}:${op}` the fake Confluence refuses
   let seq = 0;
 
   const bitbucket = {
@@ -54,6 +56,12 @@ function makeWorld() {
     async prDiffstat(ws, repo, id) { const p = prs.get(`${strip(repo)}#${id}`); return { paths: p._paths, lines: 10 * p._paths.length }; },
     async prCommits(ws, repo, id) { return prs.get(`${strip(repo)}#${id}`)._commits; },
     async commitStatuses(ws, repo, sha) { return statuses.get(sha) ?? []; },
+    // Pipelines: a run per commit that has statuses; green when they all succeeded.
+    async pipelinesForCommit(ws, repo, sha) {
+      const list = statuses.get(sha) ?? [];
+      return list.length ? [{ target: { commit: { hash: sha } }, state: { name: "COMPLETED",
+        result: { name: list.every(s => s.state === "SUCCESSFUL") ? "SUCCESSFUL" : "FAILED" } } }] : [];
+    },
     async postPrComment(ws, repo, id, raw) { comments.push({ prId: id, raw }); return {}; },
     async commitsOn(ws, repo, head) { return commitsByHead.get(head) ?? []; },
     async isAncestor(ws, repo, a, head) {
@@ -65,7 +73,14 @@ function makeWorld() {
   };
   const jira = {
     async getIssue(keyOrId) {
-      for (const i of issues.values()) if (i.key === keyOrId || i.id === String(keyOrId)) return structuredClone(i);
+      for (const i of issues.values()) {
+        if (i.key !== keyOrId && i.id !== String(keyOrId)) continue;
+        // Issue-perspective links, as Jira returns them: source <outward> destination.
+        const ref = id => { const o = [...issues.values()].find(x => x.id === String(id)); return o ? { id: o.id, key: o.key } : { id: String(id) }; };
+        const issuelinks = [...links.values()].flatMap(l => (l.sourceIssueId === i.id ? [{ id: l.id, type: l.issueLinkType, outwardIssue: ref(l.destinationIssueId) }]
+          : l.destinationIssueId === i.id ? [{ id: l.id, type: l.issueLinkType, inwardIssue: ref(l.sourceIssueId) }] : []));
+        return { ...structuredClone(i), fields: { ...structuredClone(i.fields ?? {}), issuelinks } };
+      }
       return null;
     },
     async getIssueLink(id) { return links.get(String(id)); },
@@ -94,8 +109,9 @@ function makeWorld() {
     async addLabel(id, name) { confluenceCalls.push(`label+ ${id} ${name}`); },
     async removeLabel(id, name) { confluenceCalls.push(`label- ${id} ${name}`); },
     async addFooterComment(id, storage) { confluenceCalls.push(`comment ${id} ${storage.replace(/<[^>]+>/g, "").slice(0, 60)}`); },
-    async restrictRead(id, group) { confluenceCalls.push(`restrict ${id} ${group}`); },
-    async clearRestrictions(id) { confluenceCalls.push(`unrestrict ${id}`); },
+    async getRestrictions(id) { confluenceCalls.push(`get-restrictions ${id}`); return structuredClone(restrictions.get(String(id)) ?? { read: { users: [], groups: [] }, update: { users: [], groups: [] } }); },
+    async setRestrictions(id, r) { confluenceCalls.push(`set-restrictions ${id} read:${[...r.read.users, ...r.read.groups].join(",") || "-"}`); restrictions.set(String(id), structuredClone(r)); },
+    async canUser(id, accountId, op) { return !denied.has(`${id}:${accountId}:${op}`); },
     async updatePage(id, { title, storage, nextVersion }) {
       const vs = pages.get(String(id));
       if (nextVersion !== vs.length + 1) throw new Error(`version conflict: ${nextVersion} vs ${vs.length + 1}`);
@@ -117,7 +133,7 @@ function makeWorld() {
 
   const strip = u => String(u).replace(/[{}]/g, "").toLowerCase();
   const w = {
-    clock, prs, comments, jiraComments, confluenceCalls, issueComments, issues, links, pages, statuses, mainLine, commitsByHead,
+    clock, prs, comments, jiraComments, confluenceCalls, restrictions, denied, issueComments, issues, links, pages, statuses, mainLine, commitsByHead,
     advance(hours) { clock.t += hours * HOUR; },
     issue(key, fields = {}) {
       const i = { id: String(++seq + 10000), key, fields: { summary: `Work on ${key}`, project: { key: key.split("-")[0] },

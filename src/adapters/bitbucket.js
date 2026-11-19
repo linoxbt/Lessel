@@ -1,10 +1,10 @@
 "use strict";
 // Bitbucket Cloud REST 2.0. Forge doesn't let one app hold both site scopes (Jira, Confluence) and workspace scopes
-// (Bitbucket), so Lessel makes its Bitbucket calls in one of two ways:
-//  - through Lessel for Bitbucket (default): a signed request to its bitbucket-proxy web trigger
-//    (LESSEL_BB_PROXY_URL), which calls Bitbucket with that app's own access. No token needed;
-//  - or directly with a scoped API token, if BITBUCKET_EMAIL and BITBUCKET_API_TOKEN are set.
-// Bitbucket events and the merge check reach Lessel through the same app (see src/bridge.js).
+// (Bitbucket), so Lessel makes its Bitbucket calls through Lessel for Bitbucket: a signed request to that app's
+// bitbucket-proxy web trigger, which calls Bitbucket with its own access. The proxy's address and the secret
+// come from this installation's link (src/services/link.js), made by pairing in Lessel settings, so one
+// site can only ever reach the workspace it was paired with. Events and the merge check come the other way
+// (src/bridge.js).
 
 const { readJson, paged } = require("./http");
 
@@ -16,22 +16,19 @@ const braced = uuid => (String(uuid).startsWith("{") ? String(uuid) : `{${uuid}}
 /** Path template that URL-encodes every interpolated value (braces become %7B…%7D, which Bitbucket accepts). */
 const route = (strings, ...vals) => strings.reduce((s, str, i) => s + str + (i < vals.length ? encodeURIComponent(String(vals[i])) : ""), "");
 
-const hasToken = () => !!(process.env.BITBUCKET_EMAIL && process.env.BITBUCKET_API_TOKEN);
-function authHeader() {
-  return `Basic ${Buffer.from(`${process.env.BITBUCKET_EMAIL}:${process.env.BITBUCKET_API_TOKEN}`).toString("base64")}`;
-}
-
 /** Tests can replace the transport. */
 let transport = (url, opts) => require("@forge/api").fetch(url, opts);
 const setTransport = fn => { transport = fn; };
 
 /** Returns a fetch-like response for `path` (and an optional JSON body for POST). */
+/** Tests can replace how the link is looked up. */
+let linkFor = () => require("../services/link").bitbucketLink();
+const setLinkLookup = fn => { linkFor = fn; };
+
 async function send(path, opts = {}) {
-  if (hasToken()) {
-    return transport(`${BASE}${path}`, { ...opts, headers: { Accept: "application/json", ...(opts.headers ?? {}), Authorization: authHeader() } });
-  }
-  const url = process.env.LESSEL_BB_PROXY_URL, secret = process.env.LESSEL_BRIDGE_SECRET;
-  if (!url || !secret) throw new Error("Bitbucket isn't connected: set LESSEL_BB_PROXY_URL (Lessel for Bitbucket's bitbucket-proxy web trigger), or BITBUCKET_EMAIL and BITBUCKET_API_TOKEN.");
+  const link = await linkFor();
+  if (!link) throw new Error("Bitbucket isn't linked to this site yet: pair it in Lessel settings → Links.");
+  const { url, secret } = link;
   const { sign } = require("../bridge-sign");
   const body = JSON.stringify({ method: opts.method ?? "GET", path, ...(opts.body ? { body: JSON.parse(opts.body) } : {}) });
   const res = await transport(url, { method: "POST", headers: { "Content-Type": "application/json", "x-lessel-signature": sign(body, secret) }, body });
@@ -89,9 +86,22 @@ async function commitsOn(ws, repo, branch, { max = 5 } = {}) {
 async function isAncestor(ws, repo, ancestor, head) {
   if (!ancestor || !head) return false;
   if (head.startsWith(ancestor) || ancestor.startsWith(head)) return true;
+  if (!/^[0-9a-f]{7,40}$/i.test(ancestor) || !/^[0-9a-f]{7,40}$/i.test(head)) throw new Error("merge-base needs commit hashes");
   const [w, r] = repoPath(ws, repo);
-  const res = await get(`${route`/2.0/repositories/${w}/${r}/merge-base/`}${encodeURIComponent(ancestor)}..${encodeURIComponent(head)}`);
+  // Bitbucket's revspec is "<a>..<b>"; the proxy allows ".." only in exactly this form.
+  const res = await get(`${route`/2.0/repositories/${w}/${r}/merge-base/`}${ancestor.toLowerCase()}..${head.toLowerCase()}`);
   return !!res?.hash && (res.hash.startsWith(ancestor) || ancestor.startsWith(res.hash));
+}
+
+/** Pipelines runs for a commit, newest first (the latest 50 runs of the repository are searched). */
+async function pipelinesForCommit(ws, repo, sha) {
+  const [w, r] = repoPath(ws, repo);
+  const page = await get(`${route`/2.0/repositories/${w}/${r}/pipelines/`}?sort=-created_on&pagelen=50`);
+  const s = String(sha).toLowerCase();
+  return (page?.values ?? []).filter(p => {
+    const h = String(p.target?.commit?.hash ?? "").toLowerCase();
+    return h && (h.startsWith(s) || s.startsWith(h));
+  });
 }
 
 async function postPrComment(ws, repo, id, raw) {
@@ -117,5 +127,5 @@ async function getEnvironment(ws, repo, envUuid) {
   return get(route`/2.0/repositories/${w}/${r}/environments/${braced(envUuid)}`);
 }
 
-module.exports = { setTransport, route, braced, getPr, prDiffstat, prCommits, commitStatuses, getCommit, commitsOn, isAncestor,
+module.exports = { setTransport, setLinkLookup, pipelinesForCommit, route, braced, getPr, prDiffstat, prCommits, commitStatuses, getCommit, commitsOn, isAncestor,
   postPrComment, listPrs, listDeployments, getEnvironment };

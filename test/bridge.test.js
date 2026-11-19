@@ -1,12 +1,21 @@
 "use strict";
-// The Lessel ↔ Lessel for Bitbucket link, and the token-based Bitbucket adapter.
+// The links between Lessel, Lessel for Bitbucket, Lessel's Confluence installation and the demo runner:
+// pairing, per-channel keys, replay protection, the Bitbucket proxy, and the Bitbucket adapter.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("fs");
 const path = require("path");
 const { sign, verify } = require("../src/bridge-sign");
+const { connectDb, resetSchema, teardown } = require("./helpers/world");
 
 const SECRET = "s".repeat(40);
+const LESSEL_URL = "https://aaa.hello.atlassian-dev.net/x1/bridge";
+const PROXY_URL = "https://bbb.hello.atlassian-dev.net/x1/proxy";
+const WS = "6f3b2a1c-0d4e-4f5a-8b6c-7d8e9f0a1b2c";
+
+let pool;
+test.before(async () => { pool = await connectDb(); });
+test.after(async () => { teardown(); await pool?.end(); });
 
 test("both apps ship the same signing code", () => {
   const a = fs.readFileSync(path.join(__dirname, "../src/bridge-sign.js"), "utf8");
@@ -24,6 +33,7 @@ test("signatures: fresh and exact only", () => {
   assert.equal(verify('{"a":1}', "t=1,v1=zz", SECRET, now), false);
   assert.equal(verify('{"a":1}', h, "short", now), false, "weak secret refused");
   assert.equal(verify('{"a":1}', undefined, SECRET, now), false);
+  assert.equal(verify('{"a":1}', h, undefined, now), false, "no secret, no entry");
 });
 
 function withModule(rel, exportsObj, fn) {
@@ -33,127 +43,188 @@ function withModule(rel, exportsObj, fn) {
   return Promise.resolve(fn()).finally(() => { if (saved) require.cache[p] = saved; else delete require.cache[p]; });
 }
 
-test("bridge: unsigned requests get 401; signed ones reach the gate and the event handler", async () => {
-  process.env.LESSEL_BRIDGE_SECRET = SECRET;
+/** A fake Forge storage for the Bitbucket app (one workspace installation). */
+function fakeKvs() {
+  const m = new Map();
+  return { async getSecret(k) { return m.get(k) ?? undefined; }, async setSecret(k, v) { m.set(k, structuredClone(v)); },
+    async deleteSecret(k) { m.delete(k); }, _m: m };
+}
+
+/** Wire the two apps together in-process: HTTP calls go straight to the other side's web trigger handler. */
+function wire() {
   const { bitbucketBridge } = require("../src/bridge");
-  const req = (obj, sig) => {
-    const body = JSON.stringify(obj);
-    return { body, headers: { "x-lessel-signature": [sig === undefined ? sign(body, SECRET) : sig] } };
-  };
-  assert.equal((await bitbucketBridge(req({ kind: "event", event: {} }, "t=1,v1=00"))).statusCode, 401);
-  assert.equal((await bitbucketBridge({ body: "{}", headers: {} })).statusCode, 401);
-
-  const seen = [];
-  await withModule("../src/enforce/gate", { mergeGate: async e => { seen.push(["gate", e.pullrequest.id]); return { success: false, message: "Brook is L1. 0/2 human approvals." }; } }, async () => {
-    await withModule("../src/events/bitbucket", { onBitbucketEvent: async e => { seen.push(["event", e.eventType]); } }, async () => {
-      const g = await bitbucketBridge(req({ kind: "merge-check", event: { pullrequest: { id: 7 } } }));
-      assert.equal(g.statusCode, 200);
-      assert.deepEqual(JSON.parse(g.body), { success: false, message: "Brook is L1. 0/2 human approvals." });
-      const ev = await bitbucketBridge(req({ kind: "event", event: { eventType: "avi:bitbucket:push:repository" } }));
-      assert.equal(ev.statusCode, 200);
-      assert.equal((await bitbucketBridge(req({ kind: "nope" }))).statusCode, 400);
-      assert.equal((await bitbucketBridge(req({ kind: "run-job", type: "backfill" }))).statusCode, 400, "only migrate and hourly");
-      assert.equal((await bitbucketBridge(req({ kind: "dismiss-taint", sourceId: "x; DROP" }))).statusCode, 400, "source ids are validated");
-      await withModule("../src/jobs", { enqueue: async b => { seen.push(["job", b.type]); } }, async () => {
-        assert.equal((await bitbucketBridge(req({ kind: "run-job", type: "migrate" }))).statusCode, 202);
-      });
-    });
-  });
-  assert.deepEqual(seen, [["gate", 7], ["event", "avi:bitbucket:push:repository"], ["job", "migrate"]]);
-  delete process.env.LESSEL_BRIDGE_SECRET;
-});
-
-test("Lessel for Bitbucket: forwards signed requests, and fails the merge check closed", async () => {
   const app = require("../bitbucket-app/src/index");
-  process.env.LESSEL_BRIDGE_URL = "https://abc.hello.atlassian-dev.net/x1/t";
-  process.env.LESSEL_BRIDGE_SECRET = SECRET;
-  const calls = [];
-  app.setTransport(async (url, opts) => {
-    calls.push({ url, opts });
-    assert.ok(verify(opts.body, opts.headers["x-lessel-signature"], SECRET));
-    const msg = JSON.parse(opts.body);
-    const body = msg.kind === "merge-check" ? { success: true, message: "Brook is L3. It may self-merge." } : { ok: true };
-    return { ok: true, status: 200, text: async () => JSON.stringify(body) };
-  });
-  assert.deepEqual(await app.mergeCheck({ pullrequest: { id: 1 } }), { success: true, message: "Brook is L3. It may self-merge." });
-  await app.onEvent({ eventType: "avi:bitbucket:created:pullrequest" });
-  assert.equal(calls.length, 2);
-  assert.equal(calls[0].url, process.env.LESSEL_BRIDGE_URL);
+  const appLink = require("../bitbucket-app/src/link");
+  const link = require("../src/services/link");
+  const bb = require("../src/adapters/bitbucket");
+  const kvs = fakeKvs();
+  const toLessel = async (url, opts) => {
+    assert.equal(url, LESSEL_URL);
+    const out = await bitbucketBridge({ body: opts.body, headers: { "x-lessel-signature": [opts.headers["x-lessel-signature"]] } });
+    return { ok: out.statusCode < 300, status: out.statusCode, text: async () => out.body };
+  };
+  const toProxy = async (url, opts) => {
+    assert.equal(url, PROXY_URL);
+    const out = await app.bitbucketProxy({ body: opts.body, headers: { "x-lessel-signature": [opts.headers["x-lessel-signature"]] } },
+      { installContext: `ari:cloud:bitbucket::workspace/${WS}` });
+    return { ok: out.statusCode === 200, status: out.statusCode, text: async () => out.body };
+  };
+  link.setLinkPorts({ webTriggerUrl: async () => LESSEL_URL, transport: toLessel });
+  appLink.setLinkPorts({ storage: () => kvs, transport: toLessel, proxyUrl: async () => PROXY_URL });
+  app.setTransport(toLessel);
+  bb.setTransport(toProxy);
+  bb.setLinkLookup(() => link.bitbucketLink());
+  return { bitbucketBridge, app, appLink, link, bb, kvs };
+}
 
-  app.setTransport(async () => ({ ok: false, status: 500, text: async () => '{"error":"x"}' }));
-  const closed = await app.mergeCheck({ pullrequest: { id: 1 } });
-  assert.equal(closed.success, false);
-  assert.match(closed.message, /^Lessel couldn't be reached \(Lessel answered 500/);
+test("pairing: a code from Lessel links exactly one workspace; each kind of message needs its own key; replays are refused", async (t) => {
+  if (!pool) return t.skip("no test database");
+  await resetSchema(pool);
+  const { bitbucketBridge, app, appLink, link, kvs } = wire();
+  const call = (obj, secret) => { const body = JSON.stringify(obj); return bitbucketBridge({ body, headers: { "x-lessel-signature": [sign(body, secret)] } }); };
+
+  // Unpaired: the workspace sends nothing, and its merge check passes without a decision.
+  assert.deepEqual(await app.mergeCheck({ pullrequest: { id: 1 } }),
+    { success: true, message: "Lessel isn't paired with a Jira site for this workspace; no decision applied." });
+  assert.equal((await call({ kind: "event", event: {} }, SECRET)).statusCode, 401, "no link, no entry");
+
+  const { code } = await link.createPairingCode("bitbucket", "admin-1");
+  assert.match(code, /^lessel1\./);
+  assert.deepEqual((await link.status()).bitbucket, { linked: false, pending: true });
+  await assert.rejects(appLink.pair("lessel1.garbage", {}), /isn't a Bitbucket pairing code/);
+  await appLink.pair(code, { installContext: `ari:cloud:bitbucket::workspace/{${WS}}` });
+  const st = (await link.status()).bitbucket;
+  assert.equal(st.linked, true);
+  assert.equal(st.workspace, WS);
+  assert.equal((await link.bitbucketLink()).url, PROXY_URL);
+  const secret = link.decodeCode(code).s;
+  assert.equal(kvs._m.get("lessel-link").secret, secret, "the workspace keeps the secret in its own storage");
+
+  // Events: acknowledged at once and handed to the queue (B13), compacted.
+  const queued = [];
+  await withModule("../src/jobs", { enqueue: async (b, key) => { queued.push([b.type, key, b.event?.pullrequest?.id]); } }, async () => {
+    await app.onEvent({ eventType: "avi:bitbucket:created:pullrequest", repository: { uuid: "{R-1}" }, pullrequest: { id: 7, title: "big", description: "x".repeat(5000) } });
+    // The Bitbucket link can't run operator actions, nor speak for the runner.
+    assert.equal((await call({ kind: "setup", settings: { windowHours: 1 } }, secret)).statusCode, 401);
+    assert.equal((await call({ kind: "run-job", type: "migrate" }, secret)).statusCode, 401);
+    assert.equal((await call({ kind: "declare-context", agentId: "brook" }, secret)).statusCode, 401);
+    assert.equal((await call({ kind: "confluence-event", event: {} }, secret)).statusCode, 401);
+  });
+  assert.deepEqual(queued, [["bitbucket-event", "bb-pr-R1-7", 7]]);
+
+  // A replayed request (same body and signature) is refused.
+  const body = JSON.stringify({ kind: "pair", proxyUrl: PROXY_URL, workspace: WS });
+  const req = { body, headers: { "x-lessel-signature": [sign(body, secret)] } };
+  assert.equal((await bitbucketBridge(req)).statusCode, 200);
+  assert.equal((await bitbucketBridge(req)).statusCode, 409);
+  assert.equal((await call({ kind: "pair", proxyUrl: "https://evil.example.com/x" }, secret)).statusCode, 400, "partner addresses must be Forge web triggers");
+
+  // Merge checks reach the gate; a failure fails closed with a plain message.
+  await withModule("../src/enforce/gate", { mergeGate: async e => ({ success: false, message: `Brook is L1 on #${e.pullrequest.id}.` }) }, async () => {
+    assert.deepEqual(await app.mergeCheck({ pullrequest: { id: 7 } }), { success: false, message: "Brook is L1 on #7." });
+    assert.deepEqual(await app.mergeCheck({ pullrequest: { id: 7 } }), { success: false, message: "Brook is L1 on #7." }, "merge checks may repeat");
+  });
+  app.setTransport(async () => ({ ok: false, status: 500, text: async () => '{"error":"internal detail"}' }));
+  assert.deepEqual(await app.mergeCheck({ pullrequest: { id: 1 } }), { success: false, message: "Lessel couldn't be reached. Try again in a minute." });
   await assert.rejects(app.onEvent({}), /Lessel answered 500/, "events throw so Forge can retry");
 
-  delete process.env.LESSEL_BRIDGE_URL;
-  assert.equal((await app.mergeCheck({})).success, false, "unconfigured fails closed");
-  delete process.env.LESSEL_BRIDGE_SECRET;
+  // A new code replaces the link: the old secret stops working.
+  await link.createPairingCode("bitbucket", "admin-1");
+  assert.equal((await call({ kind: "event", event: {} }, secret)).statusCode, 401);
+  await link.unlink("bitbucket", "admin-1");
+  assert.deepEqual((await link.status()).bitbucket, { linked: false });
 });
 
-test("Bitbucket adapter: token auth, encoded UUIDs, no pagination off-site", async () => {
-  const bb = require("../src/adapters/bitbucket");
-  const calls = [];
-  bb.setTransport(async (url, opts) => {
-    calls.push({ url, auth: opts.headers.Authorization });
-    if (url.includes("/diffstat") && !url.includes("page=2")) {
-      return { ok: true, status: 200, text: async () => JSON.stringify({ values: [{ new: { path: "a.js" }, lines_added: 3 }],
-        next: "https://api.bitbucket.org/2.0/repositories/%7Bw%7D/%7Br%7D/pullrequests/5/diffstat?page=2" }) };
-    }
-    return { ok: true, status: 200, text: async () => JSON.stringify({ values: [{ old: { path: "b.js" }, lines_removed: 2 }] }) };
-  });
-  await assert.rejects(bb.getPr("w", "r", 5), /BITBUCKET_EMAIL and BITBUCKET_API_TOKEN/);
-  process.env.BITBUCKET_EMAIL = "bot@example.com";
-  process.env.BITBUCKET_API_TOKEN = "tok";
-  const ds = await bb.prDiffstat("w", "{r}", 5);
-  assert.deepEqual(ds, { paths: ["a.js", "b.js"], lines: 5 });
-  assert.equal(calls[0].url, "https://api.bitbucket.org/2.0/repositories/%7Bw%7D/%7Br%7D/pullrequests/5/diffstat");
-  assert.equal(calls[0].auth, `Basic ${Buffer.from("bot@example.com:tok").toString("base64")}`);
-
-  bb.setTransport(async () => ({ ok: true, status: 200, text: async () => JSON.stringify({ values: [], next: "https://evil.example.com/x" }) }));
-  await assert.rejects(bb.listPrs("w", "r"), /Refusing to follow a pagination link/);
-  delete process.env.BITBUCKET_EMAIL; delete process.env.BITBUCKET_API_TOKEN;
-});
-
-test("Confluence installation forwards events to the Jira one, signed", async () => {
-  const client = require("../src/bridge-client");
-  process.env.LESSEL_BRIDGE_URL = "https://abc.hello.atlassian-dev.net/x1/t";
-  process.env.LESSEL_BRIDGE_SECRET = SECRET;
-  const sent = [];
-  client.setTransport(async (url, opts) => { sent.push(JSON.parse(opts.body)); assert.ok(verify(opts.body, opts.headers["x-lessel-signature"], SECRET));
-    return { ok: true, status: 200, text: async () => "{\"ok\":true}" }; });
-  const { onConfluenceEvent } = require("../src/index");
-  const ev = { eventType: "avi:confluence:updated:page", content: { id: "1" } };
-  await onConfluenceEvent(ev, { installContext: "ari:cloud:confluence::site/abc" });
-  assert.deepEqual(sent, [{ kind: "confluence-event", event: ev }]);
-  assert.equal(client.inConfluenceInstall({ installContext: "ari:cloud:jira::site/abc" }), false);
-  delete process.env.LESSEL_BRIDGE_URL; delete process.env.LESSEL_BRIDGE_SECRET;
-});
-
-
-test("Bitbucket calls go through Lessel for Bitbucket's proxy, which only allows what Lessel needs", async () => {
-  const app = require("../bitbucket-app/src/index");
-  const bb = require("../src/adapters/bitbucket");
-  process.env.LESSEL_BRIDGE_SECRET = SECRET;
-  process.env.LESSEL_BB_PROXY_URL = "https://def.hello.atlassian-dev.net/x1/p";
+test("Bitbucket proxy: Lessel's calls go through the paired workspace only, and only what Lessel needs", async (t) => {
+  if (!pool) return t.skip("no test database");
+  await resetSchema(pool);
+  const { app, appLink, link, bb } = wire();
   const asApp = [];
-  app.setBitbucketRequest(async (path, opts) => {
-    asApp.push(`${opts.method} ${path}`);
-    return { status: 200, text: async () => JSON.stringify(path.endsWith("/comments") ? { id: 1 } : { id: 9, title: "PAY-1" }) };
+  app.setBitbucketRequest(async (p, opts) => {
+    asApp.push(`${opts.method} ${p}`);
+    return { status: 200, text: async () => JSON.stringify(p.endsWith("/comments") ? { id: 1 } : p.includes("merge-base") ? { hash: "abc1234def56" } : { id: 9, title: "PAY-1" }) };
   });
-  // Lessel's adapter → (signed web trigger call) → the Bitbucket app's handler, wired directly.
-  bb.setTransport(async (url, opts) => {
-    assert.equal(url, process.env.LESSEL_BB_PROXY_URL);
-    const out = await app.bitbucketProxy({ body: opts.body, headers: { "x-lessel-signature": [opts.headers["x-lessel-signature"]] } });
-    return { ok: out.statusCode === 200, status: out.statusCode, text: async () => out.body };
-  });
+  await assert.rejects(bb.getPr("w", "r", 9), /isn't linked to this site yet/);
+  await appLink.pair((await link.createPairingCode("bitbucket", "admin-1")).code, { installContext: `ari:cloud:bitbucket::workspace/${WS}` });
+
   assert.deepEqual(await bb.getPr("w", "r", 9), { id: 9, title: "PAY-1" });
   assert.deepEqual(await bb.postPrComment("w", "r", 9, "**Lessel:** hi"), { id: 1 });
-  assert.deepEqual(asApp, ["GET /2.0/repositories/%7Bw%7D/%7Br%7D/pullrequests/9", "POST /2.0/repositories/%7Bw%7D/%7Br%7D/pullrequests/9/comments"]);
+  // B1: merge-base takes "<hash>..<hash>", the only ".." the proxy allows.
+  assert.equal(await bb.isAncestor("w", "r", "abc1234def56", "fedcba9876543210fedcba9876543210fedcba98"), true);
+  await assert.rejects(bb.isAncestor("w", "r", "main", "x..y"), /needs commit hashes/);
+  assert.deepEqual(asApp, ["GET /2.0/repositories/%7Bw%7D/%7Br%7D/pullrequests/9", "POST /2.0/repositories/%7Bw%7D/%7Br%7D/pullrequests/9/comments",
+    "GET /2.0/repositories/%7Bw%7D/%7Br%7D/merge-base/abc1234def56..fedcba9876543210fedcba9876543210fedcba98"]);
 
-  const signed = obj => { const body = JSON.stringify(obj); return { body, headers: { "x-lessel-signature": [sign(body, SECRET)] } }; };
-  assert.equal((await app.bitbucketProxy(signed({ method: "POST", path: "/2.0/repositories/w/r/pullrequests/9/merge" }))).statusCode, 403);
-  assert.equal((await app.bitbucketProxy(signed({ method: "GET", path: "/2.0/user" }))).statusCode, 403);
-  assert.equal((await app.bitbucketProxy({ body: "{}", headers: {} })).statusCode, 401);
-  delete process.env.LESSEL_BRIDGE_SECRET; delete process.env.LESSEL_BB_PROXY_URL;
+  const secret = (await appLink.getLink()).secret;
+  const signed = obj => { const body = JSON.stringify(obj); return { body, headers: { "x-lessel-signature": [sign(body, secret)] } }; };
+  const proxy = obj => app.bitbucketProxy(signed(obj), {});
+  assert.equal((await proxy({ method: "POST", path: "/2.0/repositories/w/r/pullrequests/9/merge" })).statusCode, 403);
+  assert.equal((await proxy({ method: "GET", path: "/2.0/user" })).statusCode, 403);
+  assert.equal((await proxy({ method: "GET", path: "/2.0/repositories/w/r/commits/../../user" })).statusCode, 403, "traversal");
+  assert.equal((await proxy({ method: "GET", path: "/2.0/repositories/w/r/commits/%2e%2e%2fuser" })).statusCode, 403, "encoded traversal");
+  assert.equal((await proxy({ method: "GET", path: "/2.0/repositories/w/r/merge-base/main..HEAD" })).statusCode, 403, "merge-base takes hashes only");
+  assert.equal((await proxy({ method: "GET", path: "/2.0/repositories/w/r/pipelines/?sort=-created_on&pagelen=50" })).statusCode, 200);
+  assert.equal((await app.bitbucketProxy({ body: "{}", headers: {} }, {})).statusCode, 401);
+
+  // Operator pairing (the demo site's own workspace) needs the operator key.
+  process.env.LESSEL_OPERATOR_SECRET = "o".repeat(40);
+  try {
+    const code = (await link.createPairingCode("bitbucket", "admin-1")).code;
+    const body = JSON.stringify({ kind: "operator-pair", code });
+    assert.equal((await app.bitbucketProxy({ body, headers: { "x-lessel-signature": [sign(body, secret)] } }, {})).statusCode, 401);
+    const ok = await app.bitbucketProxy({ body, headers: { "x-lessel-signature": [sign(body, process.env.LESSEL_OPERATOR_SECRET)] } },
+      { installContext: `ari:cloud:bitbucket::workspace/${WS}` });
+    assert.equal(ok.statusCode, 200);
+    assert.equal((await link.status()).bitbucket.linked, true);
+  } finally { delete process.env.LESSEL_OPERATOR_SECRET; }
+});
+
+test("Confluence installation: pairs with a code, then forwards its events to the Jira installation", async (t) => {
+  if (!pool) return t.skip("no test database");
+  await resetSchema(pool);
+  const { link } = wire();
+  const client = require("../src/bridge-client");
+  const { onConfluenceEvent } = require("../src/index");
+  const ev = { eventType: "avi:confluence:updated:page", content: { id: "1" } };
+  const ctx = { installContext: "ari:cloud:confluence::site/abc" };
+
+  const sent = [];
+  client.setTransport(async () => { sent.push(1); return { ok: true, status: 202, text: async () => "{}" }; });
+  assert.equal(await onConfluenceEvent(ev, ctx), null, "unpaired: dropped, nothing sent");
+  assert.equal(sent.length, 0);
+
+  const { code } = await link.createPairingCode("confluence", "admin-1");
+  await assert.rejects(link.pairConfluence((await link.createPairingCode("runner", "admin-1")).code, "admin-c"), /for another link/);
+  await link.pairConfluence(code, "admin-c");
+  assert.equal((await link.status()).confluence.linked, true);
+  assert.equal((await link.confluenceStatus()).linked, true);
+
+  const { bitbucketBridge } = require("../src/bridge");
+  const queued = [];
+  client.setTransport(async (url, opts) => {
+    assert.equal(url, LESSEL_URL);
+    const out = await bitbucketBridge({ body: opts.body, headers: { "x-lessel-signature": [opts.headers["x-lessel-signature"]] } });
+    return { ok: out.statusCode < 300, status: out.statusCode, text: async () => out.body };
+  });
+  await withModule("../src/jobs", { enqueue: async b => { queued.push(b); } }, () => onConfluenceEvent(ev, ctx));
+  assert.deepEqual(queued, [{ type: "confluence-event", event: ev }]);
+  assert.equal(client.inConfluenceInstall({ installContext: "ari:cloud:jira::site/abc" }), false);
+});
+
+test("Bitbucket adapter: encoded UUIDs, no pagination off-site", async () => {
+  const bb = require("../src/adapters/bitbucket");
+  bb.setLinkLookup(async () => ({ url: PROXY_URL, secret: SECRET }));
+  const calls = [];
+  bb.setTransport(async (url, opts) => {
+    const { path: p } = JSON.parse(opts.body);
+    calls.push(p);
+    const inner = p.includes("/diffstat") && !p.includes("page=2")
+      ? { values: [{ new: { path: "a.js" }, lines_added: 3 }], next: "https://api.bitbucket.org/2.0/repositories/%7Bw%7D/%7Br%7D/pullrequests/5/diffstat?page=2" }
+      : { values: [{ old: { path: "b.js" }, lines_removed: 2 }] };
+    return { ok: true, status: 200, text: async () => JSON.stringify({ status: 200, body: JSON.stringify(inner) }) };
+  });
+  assert.deepEqual(await bb.prDiffstat("w", "{r}", 5), { paths: ["a.js", "b.js"], lines: 5 });
+  assert.equal(calls[0], "/2.0/repositories/%7Bw%7D/%7Br%7D/pullrequests/5/diffstat");
+  bb.setTransport(async () => ({ ok: true, status: 200, text: async () => JSON.stringify({ status: 200, body: JSON.stringify({ values: [], next: "https://evil.example.com/x" }) }) }));
+  await assert.rejects(bb.listPrs("w", "r"), /Refusing to follow a pagination link/);
 });

@@ -97,7 +97,7 @@ test("assignment → declare-context (before PR) → commit with trailer → PR 
     const first = seen.requests[0];
     assert.equal(first.reasoning_effort, "high");
     assert.equal(first.tool_choice, "auto");
-    assert.deepEqual(first.tools.map(t => t.function.name), ["list_files", "read_file", "write_file", "run_tests", "read_page", "finish"]);
+    assert.deepEqual(first.tools.map(t => t.function.name), ["list_files", "read_file", "write_file", "run_tests", "update_dependency", "read_page", "finish"]);
     assert.equal(first.tools[2].function.parameters.required.join(","), "path,content");
     assert.equal(first.messages[0].role, "system");
     assert.match(first.messages[1].content, /^Jira work item PAY-201: Add index on entries/);
@@ -108,7 +108,7 @@ test("assignment → declare-context (before PR) → commit with trailer → PR 
     assert.match(toolMsg.content, /^Ledger runbook \(version 7\)/);
     assert.equal(seen.requests.length, 3, "finish ends the loop without another model call");
 
-    const branch = "PAY-201-add-index-on-entries";
+    const branch = "lessel/brook/PAY-201";
     const log = sh(bare, "log", "-1", "--format=%an%n%B", branch);
     assert.match(log, /^Brook \(agent\)\nPAY-201 Add index on entries\(account_id\)\n\nLessel-Agent: brook/);
     assert.equal(sh(bare, "show", `${branch}:services/ledger/migrations/0003_entries_account_idx.sql`),

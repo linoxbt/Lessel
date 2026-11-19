@@ -8,6 +8,8 @@ const { shapeObj } = require("./shapes");
 const { sentence, needWords } = require("../core/policy");
 
 async function commentOnPr(prRow, agent, cause, cfg) {
+  // Imported (judge snapshot) PRs belong to another site's Bitbucket: never call out for them.
+  if (String(prRow.repo_uuid).startsWith("imported:")) return false;
   try {
     const pr = await ports.bitbucket.getPr(prRow.workspace_uuid, prRow.repo_uuid, prRow.pr_id);
     if (pr?.state && pr.state !== "OPEN") return false;

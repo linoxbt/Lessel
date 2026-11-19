@@ -78,13 +78,16 @@ export class Lessel {
   declareContext({ issueKey, sourceUrl, sourceVersion, readAt }) {
     return this.call("declare-context", { issueKey, sourceUrl, sourceVersion, readAt });
   }
-  checkTicketFit(issueKey) { return this.call("check-ticket-fit", { issueKey }); }
 }
 
 /**
- * The same two calls through Lessel's signed web trigger (LESSEL_BRIDGE_URL + LESSEL_BRIDGE_SECRET), for the
- * demo rig: no per-agent MCP sign-in. The runner names the agent; Lessel trusts it because only holders of the
- * shared secret can call. Third-party agents use the MCP server, where identity comes from the caller.
+ * The same call through Lessel's signed web trigger (LESSEL_BRIDGE_URL + LESSEL_RUNNER_SECRET), for the demo
+ * rig: no per-agent MCP sign-in. The runner names the agent; Lessel trusts it because only holders of the runner
+ * secret can call. That secret is not Lessel's master bridge secret: Lessel accepts it only for the runner's
+ * message kinds (declare-context, ticket-fit). Third-party agents use the MCP server, where identity comes from
+ * the caller.
+ *
+ * Signature: header x-lessel-signature: t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<body>">.
  */
 export class LesselBridge {
   constructor({ url, secret, agentId, fetchFn = fetch }) { Object.assign(this, { url, secret, agentId, fetchFn }); }
@@ -106,6 +109,5 @@ export class LesselBridge {
   }
 
   declareContext({ issueKey, sourceUrl, sourceVersion, readAt }) { return this.send("declare-context", { issueKey, sourceUrl, sourceVersion, readAt }); }
-  checkTicketFit(issueKey) { return this.send("ticket-fit", { issueKey }); }
 }
 

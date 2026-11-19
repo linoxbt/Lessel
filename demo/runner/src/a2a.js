@@ -68,7 +68,8 @@ export function readInvocation(message) {
 
 /**
  * Handle one JSON-RPC request for one agent.
- * deps: { store, start(task, invocation) }  — start() kicks off async work and must not throw.
+ * deps: { store, start(task, invocation), onCancel(task) }  — start() kicks off async work and must not throw;
+ * onCancel() stops work in flight (the model call and any running command), not just the reported state.
  */
 export async function handleRpc(body, deps) {
   if (!body || typeof body !== "object" || body.jsonrpc !== "2.0" || typeof body.method !== "string") {
@@ -127,13 +128,14 @@ function getTask(params, { store, agentId = null }) {
   return task;
 }
 
-function cancelTask(params, { store, agentId = null }) {
+function cancelTask(params, { store, agentId = null, onCancel = null }) {
   const task = ownTask(store, params?.id, agentId);
   if (!task) throw new RpcError(ERR.TASK_NOT_FOUND, "Task not found");
   if (TERMINAL.has(task.status.state)) throw new RpcError(ERR.TASK_NOT_CANCELABLE, "Task is already finished");
   task.cancelRequested = true;
   setState(task, STATE.CANCELED, "Canceled.");
   store.put(task);
+  onCancel?.(task);
   return task;
 }
 

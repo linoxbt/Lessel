@@ -1,8 +1,8 @@
 "use strict";
 // Signing for the link between Lessel (Jira/Confluence site) and Lessel for Bitbucket (workspace).
 // Forge doesn't let one app hold both site and workspace scopes, so the Bitbucket app forwards events and
-// merge-check requests to Lessel's web trigger. Both apps hold the same secret (Forge variable
-// LESSEL_BRIDGE_SECRET); every request carries `x-lessel-signature: t=<unix seconds>,v1=<hex HMAC-SHA256>`
+// merge-check requests to Lessel's web trigger. Each pair of partners shares a secret made at pairing (stored per
+// installation); every request carries `x-lessel-signature: t=<unix seconds>,v1=<hex HMAC-SHA256>`
 // over `${t}.${body}`. Kept identical in bitbucket-app/src/bridge-sign.js (a test checks).
 
 const crypto = require("crypto");

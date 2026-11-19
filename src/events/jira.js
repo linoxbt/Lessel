@@ -6,9 +6,10 @@ const { ports } = require("../ports");
 const { adfText } = require("../adapters/jira");
 const { once } = require("./once");
 const { provisionalShape } = require("../services/shapes");
-const { afterItemChange, maybeExcuse, revertLinkConfirmation } = require("../services/signals");
-const { scanJiraText } = require("../services/cleanroom");
-const { incidentCausality, severityOf } = require("../core/outcomes");
+const { afterItemChange, maybeExcuse, revertLinkConfirmation, isAgentAccount } = require("../services/signals");
+const { scanJiraText, recordLinkedReads } = require("../services/cleanroom");
+const { incidentCausality, severityOf, canConfirm } = require("../core/outcomes");
+const { ISSUE_FIELDS } = require("../adapters/jira");
 
 const projectOf = key => String(key || "").split("-")[0];
 
@@ -28,6 +29,7 @@ async function onAssigned(event, cfg) {
     } else if (item.assigned_agent_id !== agent.agent_id) {
       await repo.patchItem(issue.key, { assigned_agent_id: agent.agent_id });
     }
+    await recordLinkedReads(issue.key, full.fields?.description, agent.agent_id).catch(e => console.warn("linked reads", e?.message));
   } else if (item?.assigned_agent_id) {
     await repo.patchItem(issue.key, { assigned_agent_id: null });
   }
@@ -61,6 +63,8 @@ async function onUpdated(event, cfg) {
   if (descChanged && cfg.cleanRoom.jiraProjects.includes(projectOf(issue.key))) {
     const full = await ports.jira.getIssue(issue.key, ["description"]);
     await scanJiraText(issue.key, adfText(full.fields?.description), cfg);
+    const item = await repo.getItem(issue.key);
+    if (item?.assigned_agent_id) await recordLinkedReads(issue.key, full.fields?.description, item.assigned_agent_id).catch(e => console.warn("linked reads", e?.message));
   }
 }
 
@@ -70,7 +74,9 @@ async function onLinkCreated(event, cfg) {
   if (!link) return;
   const linkId = String(link.id ?? event.issueLink?.id);
   const ids = [link.sourceIssueId ?? link.outwardIssue?.id, link.destinationIssueId ?? link.inwardIssue?.id].filter(Boolean);
-  const issues = await Promise.all(ids.map(id => ports.jira.getIssue(String(id))));
+  // The severity field may be a custom field: ask for it explicitly (audit B10).
+  const fields = [...new Set([...ISSUE_FIELDS, cfg.severity?.field ?? "priority"])];
+  const issues = await Promise.all(ids.map(id => ports.jira.getIssue(String(id), fields)));
   const workIdx = await (async () => {
     for (let i = 0; i < issues.length; i++) if (issues[i] && await repo.getItem(issues[i].key)) return i;
     return -1;
@@ -80,8 +86,23 @@ async function onLinkCreated(event, cfg) {
   const other = issues[1 - workIdx];
   if (!other) return;
   const type = link.type ?? link.issueLinkType ?? {};
-  const causedBy = [type.name, type.inward, type.outward, type.inwardName, type.outwardName].includes(cfg.causedByLinkType);
-  return recordLinkedIssue({ work, other, causedBy, linkId, actor: event.atlassianId ?? null, via: "link" }, cfg);
+  const isCausedByType = [type.name, type.inward, type.outward, type.inwardName, type.outwardName].includes(cfg.causedByLinkType);
+  // Direction matters: the work item must be the cause (the link's outward side: "PAY-1 causes INC-7").
+  // A link made by an agent account never confirms its own failure; it's recorded as associated.
+  const actor = event.atlassianId ?? null;
+  const causedBy = isCausedByType && await workIsCause(work, other, linkId) && !(await isAgentAccount(actor));
+  return recordLinkedIssue({ work, other, causedBy, linkId, actor, via: "link" }, cfg);
+}
+
+/**
+ * Is the work item the cause in this link? Read from the work item's own issue links, where an entry with
+ * `outwardIssue` reads "work <outward description> other" (for Problem/Incident: "PAY-1 causes INC-7").
+ */
+async function workIsCause(work, other, linkId) {
+  const full = await ports.jira.getIssue(work.key, ["issuelinks"]).catch(() => null);
+  const entry = (full?.fields?.issuelinks ?? []).find(l => String(l.id) === String(linkId));
+  const target = entry?.outwardIssue;
+  return !!target && (String(target.id) === String(other.id) || target.key === other.key);
 }
 
 /**
@@ -95,7 +116,8 @@ async function recordLinkedIssue({ work, other, causedBy = false, linkId = null,
   if (!kind) return null;
   const item = await repo.getItem(work.key);
   if (!item) return null;
-  const confirms = causedBy && via === "link";
+  // Late confirmations follow the same limit as the button (lateConfirmDays after the window opened).
+  const confirms = causedBy && via === "link" && canConfirm(item, ports.now(), cfg);
   const shapeService = item.shape_id.split("/")[0];
   const incidentService = (other.fields?.components ?? []).map(c => c.name).find(n => n === shapeService) ?? null;
   const causality = kind === "incident"
@@ -154,11 +176,11 @@ async function onJiraEvent(event) {
       case "avi:jira:assigned:issue": return onAssigned(event, cfg);
       case "avi:jira:updated:issue": return onUpdated(event, cfg);
       case "avi:jira:created:issuelink": return onLinkCreated(event, cfg);
-      case "avi:jira:deleted:issuelink": return revertLinkConfirmation(String(event.issueLink?.id ?? event.id), cfg);
+      case "avi:jira:deleted:issuelink": return revertLinkConfirmation(String(event.issueLink?.id ?? event.id), cfg, event.atlassianId ?? null);
       case "avi:jira:commented:issue": return onComment(event, cfg);
       default: return null;
     }
   });
 }
 
-module.exports = { onJiraEvent, onLinkCreated, recordLinkedIssue, onAssigned, onUpdated, eventKey };
+module.exports = { workIsCause, onJiraEvent, onLinkCreated, recordLinkedIssue, onAssigned, onUpdated, eventKey };

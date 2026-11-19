@@ -39,11 +39,13 @@ async function mergeGate(event) {
     if (!item) return verdict(cfg, false, `${key} isn't a work item Lessel is tracking. Check the key.`);
     // The branch key is the agent's claim; it must match the work it was given, or a blocked task could be
     // merged under another item's key.
-    if (item.assigned_agent_id !== agent.agent_id && item.agent_id !== agent.agent_id) {
+    // A PR the agent opened while the item was its own stays its own if the item is reassigned later (B3).
+    const prRow = await repo.getPrRow(normUuid(repoUuid), pr.id);
+    const openedAsAssignee = prRow?.agent_id === agent.agent_id && Number(prRow.opened_by_assignee) === 1;
+    if (item.assigned_agent_id !== agent.agent_id && item.agent_id !== agent.agent_id && !openedAsAssignee) {
       return verdict(cfg, false, `${key} isn't assigned to ${agent.display_name}. Use the key of the work item you were assigned.`);
     }
 
-    const prRow = await repo.getPrRow(normUuid(repoUuid), pr.id);
     const shape = await shapeForGate(pr, prRow ?? { workspace_uuid: normUuid(ws), repo_uuid: normUuid(repoUuid) }, item, cfg);
     const d = await decide({ agent, shape, issueKey: key, pr }, cfg);
     const why = sentence(agent, shape, d);
@@ -54,7 +56,8 @@ async function mergeGate(event) {
   } catch (e) {
     // Fail closed when enforcing, open when advisory, and always say why.
     console.error("mergeGate error", e);
-    return verdict(cfg, false, `Lessel couldn't evaluate this PR (${e.message}). Try again in a minute.`);
+    // Internal details stay in the log; the PR shows a plain reason.
+    return verdict(cfg, false, "Lessel couldn't evaluate this PR right now. Try again in a minute.");
   }
 }
 

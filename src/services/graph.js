@@ -12,6 +12,9 @@ async function syncIncidents({ issueKey, cloudId }, cfg) {
   cfg = cfg ?? await repo.getSettings();
   const queryKey = cfg.graphQueries?.incidents;
   if (!queryKey || !cloudId) return { skipped: "Teamwork Graph queries aren't registered yet." };
+  // At most once per item every 10 minutes: the panel loads often, and the graph changes slowly.
+  const bucket = Math.floor(ports.now().getTime() / 600e3);
+  if (!(await repo.claimOnce(`graph:${issueKey}:${bucket}`))) return { skipped: "Checked Teamwork Graph in the last 10 minutes." };
   try {
     const work = await ports.jira.getIssue(issueKey, ["summary", "project"]);
     if (!work) return { incidents: [], added: [] };

@@ -18,7 +18,8 @@ const content = c => ({ json: { choices: [{ message: { role: "assistant", conten
 
 test("defaults: Lessel's AI is Qwen on Fortytwo, LLM scan on suspect pages", () => {
   assert.equal(DEFAULTS.ai.provider, "qwen");
-  assert.equal(DEFAULTS.ai.qwen.baseUrl, "https://api.fortytwo.network/v1");
+  assert.equal(L.QWEN_ENDPOINT, "https://api.fortytwo.network/v1/chat/completions");
+  assert.equal(L.QWEN_KEY_VAR, "FORTYTWO_API_KEY");
   assert.equal(DEFAULTS.ai.qwen.model, "qwen/qwen3.8-27b");
   assert.equal(DEFAULTS.ai.llmScan, "suspect");
 });

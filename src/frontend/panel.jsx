@@ -1,13 +1,12 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import ForgeReconciler, {
   Box, Button, ButtonGroup, DynamicTable, Heading, Inline, Lozenge, Modal, ModalBody, ModalFooter, ModalHeader,
   ModalTitle, ModalTransition, SectionMessage, Select, Spinner, Stack, Strong, Text, TextArea, useProductContext,
   xcss,
 } from "@forge/react";
-import { invoke } from "@forge/bridge";
-import { CAUSALITY_APPEARANCE, ErrorMessage, when } from "./shared";
+import { CAUSALITY_APPEARANCE, ErrorMessage, Loaded, call, expiryText, useCall, when } from "./shared";
 
-function Signals({ data, act, onReopen }) {
+function Signals({ data, act, busy, onReopen }) {
   if (!data.signals.length) return <Text>No reverts, reopens, incidents or bugs linked to this item.</Text>;
   return (
     <Stack space="space.100">
@@ -16,26 +15,36 @@ function Signals({ data, act, onReopen }) {
           <Stack space="space.050">
             <Inline space="space.100" alignBlock="center">
               <Strong>{s.kind} {s.ref}</Strong>
-              <Lozenge appearance={CAUSALITY_APPEARANCE[s.causality]}>{s.causality}</Lozenge>
+              <Lozenge appearance={CAUSALITY_APPEARANCE[s.causality]}>{s.expired ? "expired, nobody decided" : s.causality}</Lozenge>
               {s.severity ? <Lozenge>sev {s.severity}</Lozenge> : null}
+              {s.causality === "confirmed" && data.possibleBadInput ? <Lozenge appearance="moved">possible bad input</Lozenge> : null}
             </Inline>
             {s.causality === "associated" || s.causality === "suspected" ? (
               <Stack space="space.050">
                 <Text>Did this work cause {s.ref}? A link isn't proof; only a confirmed cause changes the record.</Text>
+                {s.causality === "suspected" ? <Text>{expiryText(s)}</Text> : null}
                 <ButtonGroup>
-                  <Button appearance="danger" isDisabled={!data.canConfirm} onClick={() => act("confirmCause", { signalId: s.id })}>Confirm cause</Button>
-                  <Button onClick={() => act("dismissCause", { signalId: s.id })}>Dismiss</Button>
+                  <Button appearance="danger" isDisabled={busy || !data.canConfirm} onClick={() => act("confirmCause", { signalId: s.id })}>Confirm cause</Button>
+                  <Button isDisabled={busy} onClick={() => act("dismissCause", { signalId: s.id })}>Dismiss</Button>
                 </ButtonGroup>
+                {!data.canConfirm ? <Text>Too late to confirm: causes can only be confirmed for a while after deployment.</Text> : null}
               </Stack>
             ) : (
               <Inline space="space.100" alignBlock="center">
-                <Text>Decided by {s.decidedBy ?? "—"}{s.via ? ` via ${s.via}` : ""}, {when(s.decidedAt)} (revision {s.rev}).</Text>
-                <Button appearance="subtle" spacing="compact" onClick={() => onReopen(s)}>Reopen decision</Button>
+                <Text>
+                  {s.expired ? `Expired undecided, ${when(s.decidedAt)}` : `Decided by ${s.decidedBy ?? "—"}${s.via ? ` via ${s.via}` : ""}, ${when(s.decidedAt)}`} (revision {s.rev}).
+                </Text>
+                <Button appearance="subtle" spacing="compact" isDisabled={busy} onClick={() => onReopen(s)}>Reopen decision</Button>
               </Inline>
             )}
           </Stack>
         </Box>
       ))}
+      {data.possibleBadInput ? (
+        <SectionMessage appearance="warning" title="Possible bad input">
+          <Text>This item read a source inside a tainted range, but the read can't excuse the failure automatically (it was inferred, flagged or declared after merge). A person should decide whether the failure came from bad input.</Text>
+        </SectionMessage>
+      ) : null}
     </Stack>
   );
 }
@@ -55,28 +64,11 @@ function Reads({ reads }) {
   );
 }
 
-function App() {
-  const ctx = useProductContext();
-  const issueKey = ctx?.extension?.issue?.key;
-  const [data, setData] = useState(null);
-  const [error, setError] = useState(null);
+function Panel({ data, act, busy, error }) {
   const [reopen, setReopen] = useState(null);
   const [note, setNote] = useState("");
   const [shape, setShape] = useState(null);
-
-  const load = async () => {
-    const r = await invoke("getPanel", { issueKey });
-    if (r?.error) setError(r.error); else { setError(null); setData(r); }
-  };
-  const act = async (name, payload) => {
-    const r = await invoke(name, payload);
-    if (r?.error) setError(r.error); else { setError(null); setData(r); }
-  };
-  useEffect(() => { if (issueKey) load(); }, [issueKey]);
-
-  if (!data) return error ? <ErrorMessage error={error} /> : <Spinner />;
   if (!data.tracked) return <Text>Lessel tracks this item once it's assigned to an agent or has a linked PR.</Text>;
-
   return (
     <Stack space="space.200">
       <ErrorMessage error={error} />
@@ -90,11 +82,12 @@ function App() {
       {data.recommendation ? <SectionMessage appearance="discovery"><Text>{data.recommendation}</Text></SectionMessage> : null}
       <Inline space="space.100" alignBlock="center">
         <Text>Shape: <Strong>{data.shapeId}</Strong> ({data.shapeState}, by {data.classifiedBy}). Outcome: <Strong>{data.outcome}</Strong>.</Text>
-        {data.classifiedBy === "llm" ? <Button spacing="compact" onClick={() => setShape(data.shapeId)}>Confirm shape</Button> : null}
+        {data.classifiedBy === "llm" ? <Button spacing="compact" isDisabled={busy} onClick={() => setShape(data.shapeId)}>Confirm shape</Button> : null}
       </Inline>
+      {data.windowEnds ? <Text>Observation window: {when(data.windowStart)} → {when(data.windowEnds)}{data.windowNote ? ` (${data.windowNote})` : ""}.</Text> : null}
 
       <Heading as="h4">Signals</Heading>
-      <Signals data={data} act={act} onReopen={s => { setNote(""); setReopen(s); }} />
+      <Signals data={data} act={act} busy={busy} onReopen={s => { setNote(""); setReopen(s); }} />
 
       <Heading as="h4">Teamwork Graph</Heading>
       <Text>
@@ -121,7 +114,7 @@ function App() {
             </ModalBody>
             <ModalFooter>
               <Button onClick={() => setReopen(null)}>Cancel</Button>
-              <Button appearance="primary" isDisabled={!note.trim()} onClick={async () => { await act("reopenDecision", { signalId: reopen.id, note }); setReopen(null); }}>Reopen</Button>
+              <Button appearance="primary" isDisabled={busy || !note.trim()} onClick={async () => { await act("reopenDecision", { signalId: reopen.id, note }); setReopen(null); }}>Reopen</Button>
             </ModalFooter>
           </Modal>
         ) : null}
@@ -134,13 +127,36 @@ function App() {
             </ModalBody>
             <ModalFooter>
               <Button onClick={() => setShape(null)}>Cancel</Button>
-              <Button appearance="primary" onClick={async () => { await act("confirmShape", { issueKey: data.issueKey, shapeId: shape }); setShape(null); }}>Confirm</Button>
+              <Button appearance="primary" isDisabled={busy} onClick={async () => { await act("confirmShape", { issueKey: data.issueKey, shapeId: shape }); setShape(null); }}>Confirm</Button>
             </ModalFooter>
           </Modal>
         ) : null}
       </ModalTransition>
     </Stack>
   );
+}
+
+function Loader({ issueKey }) {
+  const state = useCall("getPanel", { issueKey }, [issueKey]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const act = async (name, payload) => {
+    setBusy(true);
+    const r = await call(name, payload);
+    setBusy(false);
+    if (r.error) { setError(r.error); return false; }
+    setError(null);
+    state.setData(r.data);
+    return true;
+  };
+  return <Loaded state={state}>{data => <Panel data={data} act={act} busy={busy} error={error} />}</Loaded>;
+}
+
+function App() {
+  const ctx = useProductContext();
+  const issueKey = ctx?.extension?.issue?.key;
+  if (!issueKey) return <Spinner />;
+  return <Loader issueKey={issueKey} />;
 }
 
 ForgeReconciler.render(<React.StrictMode><App /></React.StrictMode>);

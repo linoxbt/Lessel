@@ -5,7 +5,7 @@ const crypto = require("crypto");
 const repo = require("../db/repo");
 const { ports } = require("../ports");
 const { scan, isSuspect, stripTags } = require("../core/taint");
-const { checkDeclaration, inTaintedRange, rangeText, contextGate } = require("../core/cleanroom");
+const { checkDeclaration, inTaintedRange, rangeText, contextGate, pastRanges } = require("../core/cleanroom");
 const { UserError, reexcuseForSource } = require("./signals");
 const { notifyItems } = require("./notify");
 const { pageIdFromUrl } = require("../adapters/confluence");
@@ -51,12 +51,24 @@ async function scanConfluencePage(pageId, version, cfg) {
     }
   }
 
-  if (suspect && (src.state === "unscanned" || src.state === "clean" || src.state === "restored")) {
-    await repo.patchSource(source_id, { state: "suspect", rationale: `v${v}: ${[...new Set(findings.map(f => f.filter))].join(", ")}` });
+  // Poisoned again after a fix: a new episode. The closed range is kept (reads in it still count), and a person
+  // confirms the new one.
+  const fixed = src.tainted_from_version != null && src.clean_from_version != null && v >= src.clean_from_version;
+  if (suspect && (src.state === "unscanned" || src.state === "clean" || src.state === "restored" ||
+      (fixed && ["confirmed", "quarantined"].includes(src.state)))) {
+    await repo.patchSource(source_id, { state: "suspect", rationale: `v${v}: ${[...new Set(findings.map(f => f.filter))].join(", ")}`,
+      ...(fixed ? closeEpisode(src) : {}) });
   } else if (!suspect && src.state === "unscanned") {
     await repo.patchSource(source_id, { state: "clean" });
   }
   return { source_id, version: v, findings, suspect };
+}
+
+/** Patch that moves a fixed episode (from, cleanFrom) into past_ranges and clears the current range. */
+function closeEpisode(src) {
+  const past = pastRanges(src);
+  if (src.tainted_from_version != null && src.clean_from_version != null) past.push([src.tainted_from_version, src.clean_from_version]);
+  return { past_ranges: JSON.stringify(past.slice(-20)), tainted_from_version: null, clean_from_version: null };
 }
 
 /** Scan every version (when Clean Room is enabled after the fact, or before confirming). */
@@ -111,10 +123,13 @@ async function blastRadius(sourceId) {
     if (!byItem.has(r.issue_key)) byItem.set(r.issue_key, { issue_key: r.issue_key, agent_id: r.agent_id, versions: new Set(), late: false });
     byItem.get(r.issue_key).versions.add(r.source_version);
   }
+  const keys = [...byItem.keys()];
+  const itemsBy = new Map((await repo.itemsByKeys(keys)).map(i => [i.issue_key, i]));
+  const allPrs = await repo.prsForItems(keys);
   const items = [];
   for (const it of byItem.values()) {
-    const item = await repo.getItem(it.issue_key);
-    const prs = await repo.prsForItem(it.issue_key);
+    const item = itemsBy.get(it.issue_key);
+    const prs = allPrs.filter(p => p.issue_key === it.issue_key);
     items.push({ issue_key: it.issue_key, agent_id: it.agent_id, versions: [...it.versions].sort((a, b) => a - b),
       outcome: item?.outcome ?? "unknown", prs: prs.map(p => ({ pr_id: p.pr_id, state: p.state })) });
   }
@@ -127,7 +142,10 @@ async function confirmTaint(sourceId, actor, fromVersion, cfg) {
   if (!src) throw new UserError("Unknown source.");
   const from = Number(fromVersion);
   if (!Number.isInteger(from) || from < 1) throw new UserError("Give the first tainted version.");
-  await repo.patchSource(sourceId, { state: "confirmed", tainted_from_version: from, confirmed_by: actor, confirmed_at: ports.now() });
+  // Re-confirming a fixed source starts a new episode instead of leaving an empty range (from after cleanFrom).
+  const episode = src.clean_from_version != null && from >= src.clean_from_version ? closeEpisode(src) : {};
+  await repo.patchSource(sourceId, { ...episode, state: "confirmed", tainted_from_version: from, clean_from_version: null,
+    confirmed_by: actor, confirmed_at: ports.now() });
   await repo.logStaffAction({ actor, action: "taint-confirm", target: sourceId, note: `from v${from}` });
   await reexcuseForSource(sourceId, cfg);
   const br = await blastRadius(sourceId);
@@ -140,6 +158,7 @@ async function markFixed(sourceId, actor, cleanFromVersion, cfg) {
   cfg = cfg ?? await repo.getSettings();
   const src = await repo.getSource(sourceId);
   if (!src || src.tainted_from_version == null) throw new UserError("Confirm the taint before marking it fixed.");
+  if (src.state === "quarantined") await requirePageEdit(confluencePageId(sourceId), actor);
   const v = Number(cleanFromVersion);
   if (!Number.isInteger(v) || v <= src.tainted_from_version) throw new UserError(`The clean version must be after v${src.tainted_from_version}.`);
   if (src.state === "quarantined") await liftQuarantine(sourceId, cfg);
@@ -159,6 +178,7 @@ async function restoreClean(sourceId, actor, cfg) {
   if (!src || src.tainted_from_version == null) throw new UserError("Confirm the taint before restoring.");
   const pageId = String(sourceId).match(/^confluence:page:(\d+)$/)?.[1];
   if (!pageId) throw new UserError("Only Confluence pages can be restored.");
+  await requirePageEdit(pageId, actor);
   const cleanVersion = src.tainted_from_version - 1;
   if (cleanVersion < 1) throw new UserError("There is no clean version before the taint.");
   const [clean, current] = await Promise.all([ports.confluence.getPage(pageId, cleanVersion), ports.confluence.getPage(pageId, null)]);
@@ -175,6 +195,14 @@ async function restoreClean(sourceId, actor, cfg) {
   return br;
 }
 
+/** Quarantine, restore and lifting change a Confluence page: the person doing it must be able to edit it. */
+async function requirePageEdit(pageId, actor) {
+  if (!pageId || !actor || /^lessel:/.test(actor)) return;
+  if (!(await ports.confluence.canUser(pageId, actor, "update").catch(() => false))) {
+    throw new UserError("You need edit permission on that Confluence page to do this.");
+  }
+}
+
 const confluencePageId = sourceId => String(sourceId).match(/^confluence:page:(\d+)$/)?.[1] ?? null;
 
 /**
@@ -188,12 +216,19 @@ async function quarantine(sourceId, actor, cfg) {
   if (!src || !["confirmed", "restored"].includes(src.state)) throw new UserError("Only a confirmed tainted page can be quarantined.");
   const pageId = confluencePageId(sourceId);
   if (!pageId) throw new UserError("Only Confluence pages can be quarantined.");
+  await requirePageEdit(pageId, actor);
   const { quarantineLabel, quarantineGroup } = cfg.cleanRoom;
+  // Keep the page's own restrictions so lifting the quarantine puts back exactly those (audit S4).
+  let saved = null;
+  if (quarantineGroup) saved = await ports.confluence.getRestrictions(pageId);
   await ports.confluence.addLabel(pageId, quarantineLabel);
   await ports.confluence.addFooterComment(pageId,
     `<p><strong>Lessel Clean Room:</strong> versions in the range ${rangeText(src)} contain instructions aimed at AI agents. ` +
     `This page is quarantined until it's fixed. Agents must not use it.</p>`);
-  if (quarantineGroup) await ports.confluence.restrictRead(pageId, quarantineGroup);
+  if (quarantineGroup) {
+    await repo.patchSource(sourceId, { saved_restrictions: JSON.stringify(saved) });
+    await ports.confluence.setRestrictions(pageId, { read: { users: [], groups: [quarantineGroup] }, update: saved.update });
+  }
   await repo.patchSource(sourceId, { state: "quarantined" });
   await repo.logStaffAction({ actor, action: "quarantine", target: sourceId, note: quarantineGroup ? `read restricted to ${quarantineGroup}` : "label + comment" });
   return blastRadius(sourceId);
@@ -203,9 +238,15 @@ async function quarantine(sourceId, actor, cfg) {
 async function liftQuarantine(sourceId, cfg) {
   const pageId = confluencePageId(sourceId);
   if (!pageId) return;
+  const src = await repo.getSource(sourceId);
   try {
     await ports.confluence.removeLabel(pageId, cfg.cleanRoom.quarantineLabel);
-    if (cfg.cleanRoom.quarantineGroup) await ports.confluence.clearRestrictions(pageId);
+    if (src?.saved_restrictions) {
+      // Put back exactly what the page had before; never just delete restrictions (that would open a
+      // restricted page to the whole space).
+      await ports.confluence.setRestrictions(pageId, JSON.parse(src.saved_restrictions));
+      await repo.patchSource(sourceId, { saved_restrictions: null });
+    }
     await ports.confluence.addFooterComment(pageId, "<p><strong>Lessel Clean Room:</strong> quarantine lifted; the current version is clean.</p>");
   } catch (e) {
     console.warn(`Couldn't fully lift quarantine on ${sourceId}: ${e.message}`);
@@ -238,18 +279,24 @@ async function declareContext(agent, { issueKey, sourceUrl, sourceVersion, readA
   const declared = sourceVersion == null || sourceVersion === "" ? null : Number(sourceVersion);
   const readAtDate = readAt ? new Date(readAt) : null;
   if (readAtDate && Number.isNaN(readAtDate.getTime())) return { ok: false, message: "readAt must be an ISO-8601 time." };
+  let url = String(sourceUrl).slice(0, 500);
   if (ref.kind === "confluence") {
+    // Only pages the agent itself can view: the app can read restricted pages, and must not reveal their
+    // titles or versions to an agent that can't (audit S7).
+    if (!(await agentCanView(agent, ref.pageId))) return { ok: false, message: "Refused: that page doesn't exist or you can't view it." };
     const at = readAtDate && readAtDate < now ? readAtDate : now;
     versionAtRead = await ports.confluence.versionAt(ref.pageId, at).catch(() => null);
     const page = await ports.confluence.getPage(ref.pageId, null).catch(() => null);
     title = page?.title ?? null;
+    url = pageUrl(page, ref.pageId);
   }
   const { basis, version, flag } = checkDeclaration({ sourceVersion: declared, readAt: readAtDate, now, versionAtRead,
     notBefore: item.assigned_at });
-  const src = await repo.upsertSource({ source_id: ref.source_id, url: sourceUrl, title });
+  const src = await repo.upsertSource({ source_id: ref.source_id, url, title });
   const read_at = readAtDate && readAtDate <= now ? readAtDate : now;
   const read_id = crypto.createHash("sha256")
-    .update([issueKey, ref.source_id, version, read_at.toISOString(), now.toISOString()].join("|")).digest("hex");
+    // A declaration with its own read time is the same read when repeated (or replayed): stored once.
+    .update([issueKey, agent.agent_id, ref.source_id, version, read_at.toISOString(), readAtDate ? "" : now.toISOString()].join("|")).digest("hex");
   await repo.insertRead({ read_id, issue_key: issueKey, agent_id: agent.agent_id, source_id: ref.source_id,
     source_version: version, version_basis: basis, method: "attested", flag, read_at, recorded_at: now });
 
@@ -262,14 +309,52 @@ async function declareContext(agent, { issueKey, sourceUrl, sourceVersion, readA
   return { ok: true, message: parts.join(" "), basis, version, flag, sourceState: src.state };
 }
 
+/** The page's own address on this site, rebuilt from Confluence's answer (never the caller's text). */
+const pageUrl = (page, pageId) => (page?._links?.base && page?._links?.webui ? `${page._links.base}${page._links.webui}` : `confluence:${pageId}`);
+
+/** Can one of the agent's Atlassian accounts view the page? */
+async function agentCanView(agent, pageId) {
+  const ids = (await repo.accounts()).filter(a => a.agent_id === agent.agent_id && ["jira", "mcp"].includes(a.product)).map(a => a.account_id);
+  for (const id of ids) if (await ports.confluence.canUser(pageId, id, "read").catch(() => false)) return true;
+  return false;
+}
+
+/**
+ * Linked reads (spec §13.2): Confluence pages linked from a work item assigned to an agent are recorded as
+ * reads without an attestation (method "linked", version inferred). They never excuse a failure; if one falls in
+ * a tainted range, the item shows "possible bad input" for a person to look at.
+ */
+async function recordLinkedReads(issueKey, description, agentId) {
+  if (!agentId) return 0;
+  const { adfUrls } = require("../adapters/jira");
+  const pageIds = [...new Set([...adfUrls(description)].filter(u => /\/wiki\//.test(u)).map(pageIdFromUrl).filter(Boolean))].slice(0, 20);
+  let n = 0;
+  for (const pageId of pageIds) {
+    const page = await ports.confluence.getPage(pageId, null).catch(() => null);
+    if (!page) continue;
+    const version = page.version?.number ?? null;
+    const source_id = `confluence:page:${pageId}`;
+    await repo.upsertSource({ source_id, url: pageUrl(page, pageId), title: page.title ?? null });
+    const now = ports.now();
+    const read_id = crypto.createHash("sha256").update([issueKey, agentId, source_id, version, "linked"].join("|")).digest("hex");
+    await repo.insertRead({ read_id, issue_key: issueKey, agent_id: agentId, source_id, source_version: version,
+      version_basis: "inferred", method: "linked", flag: null, read_at: now, recorded_at: now });
+    n++;
+  }
+  return n;
+}
+
 /** check-context for the caller (spec §13.5). */
-async function checkContext(level, sourceUrl) {
+async function checkContext(level, sourceUrl, agent = null) {
   const ref = sourceRef(sourceUrl);
+  if (ref.kind === "confluence" && agent && !(await agentCanView(agent, ref.pageId))) {
+    return { verdict: "blocked", reason: "That page doesn't exist or you can't view it.", sourceState: "unknown", version: null };
+  }
   const src = (await repo.getSource(ref.source_id)) ?? { source_id: ref.source_id, url: sourceUrl, title: sourceUrl, state: "unscanned" };
   let version = null;
   if (ref.kind === "confluence") version = (await ports.confluence.getPage(ref.pageId, null).catch(() => null))?.version?.number ?? null;
   return { ...contextGate(src, level, version), sourceState: src.state, version };
 }
 
-module.exports = { sourceRef, scanConfluencePage, scanHistory, scanJiraText, rescanTicket, blastRadius, confirmTaint, markFixed,
+module.exports = { recordLinkedReads, sourceRef, scanConfluencePage, scanHistory, scanJiraText, rescanTicket, blastRadius, confirmTaint, markFixed,
   restoreClean, quarantine, dismissTaint, declareContext, checkContext };

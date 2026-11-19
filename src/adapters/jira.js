@@ -10,8 +10,8 @@ async function asAppGet(r) {
   return readJson(res, String(r));
 }
 
-async function getIssue(keyOrId, fields = ["summary", "description", "assignee", "status", "issuetype", "project",
-  "priority", "components", "created"]) {
+const ISSUE_FIELDS = ["summary", "description", "assignee", "status", "issuetype", "project", "priority", "components", "created"];
+async function getIssue(keyOrId, fields = ISSUE_FIELDS) {
   const { route } = api();
   return asAppGet(route`/rest/api/3/issue/${keyOrId}?fields=${fields.join(",")}&expand=changelog`);
 }
@@ -94,6 +94,17 @@ async function userHas(permission, { issueKey, projectKey } = {}) {
   return !!body?.permissions?.[permission]?.havePermission;
 }
 
+/** Every link address in an ADF document (link marks, inline and block cards) and in plain text. */
+function adfUrls(node, out = new Set()) {
+  if (!node) return out;
+  if (typeof node === "string") { for (const m of node.matchAll(/https?:\/\/[^\s<>"')\]]+/g)) out.add(m[0]); return out; }
+  if (node.attrs?.url) out.add(String(node.attrs.url));
+  for (const mk of node.marks ?? []) if (mk.type === "link" && mk.attrs?.href) out.add(String(mk.attrs.href));
+  if (node.type === "text" && node.text) adfUrls(node.text, out);
+  for (const c of node.content ?? []) adfUrls(c, out);
+  return out;
+}
+
 /** Plain text from an ADF document (descriptions, comments). */
 function adfText(node) {
   if (!node) return "";
@@ -102,4 +113,4 @@ function adfText(node) {
   return (node.content || []).map(adfText).join(node.type === "paragraph" ? "\n" : "");
 }
 
-module.exports = { listComments, getIssue, getStatus, listLinkTypes, getProject, listFields, getIssueLink, searchJql, addComment, userHas, adfText };
+module.exports = { adfUrls, ISSUE_FIELDS, listComments, getIssue, getStatus, listLinkTypes, getProject, listFields, getIssueLink, searchJql, addComment, userHas, adfText };

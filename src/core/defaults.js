@@ -55,13 +55,16 @@ const DEFAULTS = Object.freeze({
     { pattern: "src/ui/strings/**", cls: "docs-copy" },
   ],
   graphQueries: { incidents: null, devChain: null },
+  // What counts as a green build for self-merge. "pipelines": a successful Bitbucket Pipelines run on the PR's
+  // head commit (an agent can't fake it). "statuses": commit statuses, but only these keys (any status key
+  // can be posted by anyone with repository write access, agents included).
+  build: { source: "pipelines", statusKeys: [] },
   importedSnapshot: null,
   ai: {
     provider: "qwen",                         // "qwen" (Fortytwo, egress) | "forge" (Forge LLMs, Atlassian-hosted)
-    qwen: { baseUrl: "https://api.fortytwo.network/v1", model: "qwen/qwen3.8-27b", apiKeyEnv: "FORTYTWO_API_KEY",
-      reasoningEffort: "low" },
+    qwen: { model: "qwen/qwen3.8-27b", reasoningEffort: "low" },   // endpoint and key variable are fixed in adapters/llm.js
     llmScan: "suspect",                       // Clean Room LLM stage: "suspect" pages only | "all" pages | "off"
-  },                     // set when history was imported for judges (shown on every board)  // queryKeys from scripts/register-graph-queries.js
+  },
   cleanRoom: {
     quarantineLabel: "lessel-quarantine",
     quarantineGroup: null,                     // e.g. "lessel-quarantine": restrict reading to this group while quarantined

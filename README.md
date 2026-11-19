@@ -103,16 +103,15 @@ over a signed web trigger. All data and decisions stay in Lessel's Jira installa
 1. `npm i -g @forge/cli`, then `forge login` with an Atlassian API token.
 2. Lessel: `forge register`, `forge deploy -e development`, then `forge install -e development -p jira` and
    `-p confluence` on your site. Installed on lessel.atlassian.net already.
-3. Connect the two apps:
-   - `forge webtrigger create -f bitbucket-bridge -p jira -s <site>` gives the bridge URL.
-   - Generate a secret (`openssl rand -hex 32`). In **both** apps:
-     `forge variables set --encrypt LESSEL_BRIDGE_SECRET <secret>` and `forge variables set LESSEL_BRIDGE_URL <url>`.
-   - In Lessel: `forge variables set BITBUCKET_EMAIL <email>` and
-     `forge variables set --encrypt BITBUCKET_API_TOKEN <token>`. The token is a scoped Bitbucket API token
-     with repository read, pull request read/write and pipeline read.
-   - Redeploy after setting variables.
-4. Lessel for Bitbucket: in `bitbucket-app/`, `npm install`, `forge register`, `forge deploy`, and
+3. Lessel for Bitbucket: in `bitbucket-app/`, `npm install`, `forge register`, `forge deploy`, and
    `forge install -p bitbucket` on your workspace.
+4. Pair the installations (no shared variables: each site keeps its own links and secrets):
+   - **Bitbucket:** Jira → Lessel settings → Links → Bitbucket → *Create pairing code*, then paste it in
+     Bitbucket → Workspace settings → Lessel → *Pair*.
+   - **Confluence:** Links → Confluence → *Create pairing code*, then paste it in Confluence → Settings → Lessel.
+   - **Agent runner (optional, the demo rig):** Links → Agent runner → *Create pairing code*. The code carries the
+     bridge URL and a secret: set them on the runner as `LESSEL_BRIDGE_URL` and `LESSEL_RUNNER_SECRET`, and register
+     its agents with kind `runner`. That key can only report reads and ask for ticket fit.
 5. Migrations run on install and before every background job; the settings page also has **Run migrations**.
 6. In **Lessel settings** (Jira admin):
    - Add Brook and Atlas, and map each agent's Jira, Bitbucket and MCP accounts.
