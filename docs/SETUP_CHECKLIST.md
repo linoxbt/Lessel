@@ -38,7 +38,10 @@ available there; the agent connectors and MCP need it.
 | Agent keys (Confluence and Bitbucket) for Brook and Atlas | Done: on Railway `agent-runner`; tested against Bitbucket |
 | Lessel Demo Agents app (`e5771e11-…`) registered, deployed, installed in Jira | Done |
 | Runner configuration (`RUNNER_CONFIG_JSON`, `FORGE_APP_ID`) | Done; runner healthy and refuses unsigned requests |
-| Brook and Atlas: write access to `linoxbt/ledger-service` | Waiting: Repository settings → Repository permissions |
+| Brook and Atlas: write access to `linoxbt/ledger-service` | Done (push tested) |
+| Agents registered in Lessel (Jira, MCP and Bitbucket accounts); demo settings (repo, 72 h window, Staging) | Done via the signed link |
+| Runner picks up work assigned to the agents' accounts (`RUNNER_POLL=1`) | Done: the AI agent connectors aren't offered on this site |
+| **First end-to-end run** | Done: PAY-1 assigned to Brook → PR #1 (tests pass) → Lessel: "Brook is L1 on ledger/schema-migration … 0/2 human approvals" (advisory) |
 | 90 PAY tickets | `tickets/tickets.csv` regenerated with the runbook link; created when the agents go live |
 
 ---
