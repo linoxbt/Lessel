@@ -87,6 +87,11 @@ npm i -g @forge/cli           # once
 npm run lint:offline          # Forge's own client-side linters (scopes, endpoints, handlers, modules)
 ```
 
+## Project website
+
+https://lessel.netlify.app, a static page in `site/` deployed to Netlify (no build step). It explains Lessel for
+judges and links to the guides here.
+
 ## Deploy (needs your Atlassian account)
 
 Every account, key and ID you need, where to get each one and where it goes: [`docs/SETUP_CHECKLIST.md`](docs/SETUP_CHECKLIST.md).
