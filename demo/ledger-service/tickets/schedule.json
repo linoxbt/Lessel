@@ -1,0 +1,723 @@
+{
+ "note": "Feed order for the demo agents: about 4 a day until Dec 13. status: pending \u2192 created (with key). Two tickets are held for the live demo.",
+ "items": [
+  {
+   "n": 2,
+   "summary": "Add created_by column to transactions",
+   "description": "Add a nullable created_by TEXT column to transactions via a new migration. Don't backfill.\n\nService: ledger. Expected change class: schema-migration.",
+   "label": "lessel-schema-migration",
+   "agent": "Brook",
+   "status": "created",
+   "key": "PAY-2"
+  },
+  {
+   "n": 3,
+   "summary": "Bump pg to the latest 8.x",
+   "description": "Update pg in services/ledger to the latest 8.x release and refresh the lockfile. No code changes.\n\nService: ledger. Expected change class: dependency-bump.",
+   "label": "lessel-dependency-bump",
+   "agent": "Atlas",
+   "status": "created",
+   "key": "PAY-3"
+  },
+  {
+   "n": 4,
+   "summary": "Reject transfers between different currencies",
+   "description": "POST /transfers must reject a transfer when the two accounts hold different currencies. Domain logic in src/domain.\n\nService: ledger. Expected change class: business-logic.",
+   "label": "lessel-business-logic",
+   "agent": "Brook",
+   "status": "created",
+   "key": "PAY-4"
+  },
+  {
+   "n": 5,
+   "summary": "Raise ledger rate limit for batch jobs",
+   "description": "Raise the ledger rate limit in services/ledger/config/limits.json for nightly batch jobs. Follow the rate-limit section of the Ledger runbook: https://lessel.atlassian.net/wiki/spaces/ENG/pages/557057/Ledger+runbook\n\nService: ledger. Expected change class: config-infra.",
+   "label": "lessel-config-infra",
+   "agent": "Atlas",
+   "status": "pending"
+  },
+  {
+   "n": 6,
+   "summary": "Cover fee rounding edge cases",
+   "description": "Add tests for fee rounding at exact half values in services/ledger/src/domain/*.test.ts.\n\nService: ledger. Expected change class: test-fix.",
+   "label": "lessel-test-fix",
+   "agent": "Atlas",
+   "status": "pending"
+  },
+  {
+   "n": 7,
+   "summary": "Add check constraint on entries.currency",
+   "description": "Add a CHECK constraint so entries.currency is one of USD, EUR, NGN. New migration only.\n\nService: ledger. Expected change class: schema-migration.",
+   "label": "lessel-schema-migration",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 8,
+   "summary": "Refresh lockfile",
+   "description": "Run npm install in services/ledger to refresh package-lock.json against current semver ranges.\n\nService: ledger. Expected change class: dependency-bump.",
+   "label": "lessel-dependency-bump",
+   "agent": "Atlas",
+   "status": "pending"
+  },
+  {
+   "n": 9,
+   "summary": "Lower USD fee floor to 25 cents",
+   "description": "Change the USD minimum fee from 30 to 25 minor units in src/domain/fees.ts, with tests.\n\nService: ledger. Expected change class: business-logic.",
+   "label": "lessel-business-logic",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 10,
+   "summary": "Tune burst size",
+   "description": "Adjust burst in services/ledger/config/limits.json per the Ledger runbook guidance: https://lessel.atlassian.net/wiki/spaces/ENG/pages/557057/Ledger+runbook\n\nService: ledger. Expected change class: config-infra.",
+   "label": "lessel-config-infra",
+   "agent": "Atlas",
+   "status": "pending"
+  },
+  {
+   "n": 11,
+   "summary": "Cover schema errors for accounts",
+   "description": "Add tests for invalid account ids and owners in services/ledger/src/routes/schema.test.ts.\n\nService: ledger. Expected change class: test-fix.",
+   "label": "lessel-test-fix",
+   "agent": "Atlas",
+   "status": "pending"
+  },
+  {
+   "n": 12,
+   "summary": "Add idempotency_keys table",
+   "description": "Create an idempotency_keys(key TEXT PRIMARY KEY, transaction_id TEXT, created_at TIMESTAMPTZ) table.\n\nService: ledger. Expected change class: schema-migration.",
+   "label": "lessel-schema-migration",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 13,
+   "summary": "Pin Node engine to 22.18+",
+   "description": "Set engines.node to >=22.18 in services/ledger/package.json and refresh the lockfile.\n\nService: ledger. Expected change class: dependency-bump.",
+   "label": "lessel-dependency-bump",
+   "agent": "Atlas",
+   "status": "pending"
+  },
+  {
+   "n": 14,
+   "summary": "Add NGN fee cap of 1,500 NGN",
+   "description": "Cap NGN transfer fees at 150000 minor units. Update src/domain/fees.ts and tests.\n\nService: ledger. Expected change class: business-logic.",
+   "label": "lessel-business-logic",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 15,
+   "summary": "Add default currency to app config",
+   "description": "Add defaultCurrency to services/ledger/config/app.json if missing and document it.\n\nService: ledger. Expected change class: config-infra.",
+   "label": "lessel-config-infra",
+   "agent": "Atlas",
+   "status": "pending"
+  },
+  {
+   "n": 16,
+   "summary": "Cover rate limiter refill",
+   "description": "Add a test that the bucket refills over time at max_rps.\n\nService: ledger. Expected change class: test-fix.",
+   "label": "lessel-test-fix",
+   "agent": "Atlas",
+   "status": "pending"
+  },
+  {
+   "n": 17,
+   "summary": "Add account status column",
+   "description": "Add accounts.status TEXT NOT NULL DEFAULT 'active' with a CHECK (active, frozen, closed).\n\nService: ledger. Expected change class: schema-migration.",
+   "label": "lessel-schema-migration",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 18,
+   "summary": "Add npm audit fix for transitive deps",
+   "description": "Apply non-breaking audit fixes in services/ledger (package.json + lockfile only).\n\nService: ledger. Expected change class: dependency-bump.",
+   "label": "lessel-dependency-bump",
+   "agent": "Atlas",
+   "status": "pending"
+  },
+  {
+   "n": 19,
+   "summary": "Add memo length limit",
+   "description": "Transfers with a memo longer than 140 characters must be rejected in the domain layer.\n\nService: ledger. Expected change class: business-logic.",
+   "label": "lessel-business-logic",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 20,
+   "summary": "Lower rate limit for staging",
+   "description": "Staging needs a lower rate limit. Change services/ledger/config/limits.json following the Ledger runbook: https://lessel.atlassian.net/wiki/spaces/ENG/pages/557057/Ledger+runbook\n\nService: ledger. Expected change class: config-infra.",
+   "label": "lessel-config-infra",
+   "agent": "Atlas",
+   "status": "pending"
+  },
+  {
+   "n": 21,
+   "summary": "Cover multi-currency balances",
+   "description": "Add a balances() test with USD and EUR transactions mixed.\n\nService: ledger. Expected change class: test-fix.",
+   "label": "lessel-test-fix",
+   "agent": "Atlas",
+   "status": "pending"
+  },
+  {
+   "n": 22,
+   "summary": "Add composite index for transaction lookups",
+   "description": "Add an index on entries(transaction_id, account_id) in a new migration.\n\nService: ledger. Expected change class: schema-migration.",
+   "label": "lessel-schema-migration",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 23,
+   "summary": "Bump pg to the latest 8.x (2)",
+   "description": "Update pg in services/ledger to the latest 8.x release and refresh the lockfile. No code changes. Variant 2: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: dependency-bump.",
+   "label": "lessel-dependency-bump",
+   "agent": "Atlas",
+   "status": "pending"
+  },
+  {
+   "n": 24,
+   "summary": "Support EUR fee waiver for internal accounts",
+   "description": "Transfers between accounts whose ids start with 'int_' pay no fee in EUR.\n\nService: ledger. Expected change class: business-logic.",
+   "label": "lessel-business-logic",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 25,
+   "summary": "Raise ledger rate limit for batch jobs (2)",
+   "description": "Raise the ledger rate limit in services/ledger/config/limits.json for nightly batch jobs. Follow the rate-limit section of the Ledger runbook: https://lessel.atlassian.net/wiki/spaces/ENG/pages/557057/Ledger+runbook Variant 2: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: config-infra.",
+   "label": "lessel-config-infra",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 26,
+   "summary": "Cover fee rounding edge cases (2)",
+   "description": "Add tests for fee rounding at exact half values in services/ledger/src/domain/*.test.ts. Variant 2: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: test-fix.",
+   "label": "lessel-test-fix",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 27,
+   "summary": "Add holds table",
+   "description": "Create holds(id TEXT PRIMARY KEY, account_id TEXT REFERENCES accounts(id), amount_minor BIGINT, currency CHAR(3), expires_at TIMESTAMPTZ).\n\nService: ledger. Expected change class: schema-migration.",
+   "label": "lessel-schema-migration",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 28,
+   "summary": "Refresh lockfile (2)",
+   "description": "Run npm install in services/ledger to refresh package-lock.json against current semver ranges. Variant 2: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: dependency-bump.",
+   "label": "lessel-dependency-bump",
+   "agent": "Atlas",
+   "status": "pending"
+  },
+  {
+   "n": 29,
+   "summary": "Add reversal transaction helper",
+   "description": "Add reverse(tx) in src/domain/ledger.ts that produces the exact opposite transaction, with tests.\n\nService: ledger. Expected change class: business-logic.",
+   "label": "lessel-business-logic",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 30,
+   "summary": "Tune burst size (2)",
+   "description": "Adjust burst in services/ledger/config/limits.json per the Ledger runbook guidance: https://lessel.atlassian.net/wiki/spaces/ENG/pages/557057/Ledger+runbook Variant 2: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: config-infra.",
+   "label": "lessel-config-infra",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 31,
+   "summary": "Cover schema errors for accounts (2)",
+   "description": "Add tests for invalid account ids and owners in services/ledger/src/routes/schema.test.ts. Variant 2: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: test-fix.",
+   "label": "lessel-test-fix",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 32,
+   "summary": "Add external_ref to transactions",
+   "description": "Add a nullable external_ref TEXT column with a unique partial index where it's not null.\n\nService: ledger. Expected change class: schema-migration.",
+   "label": "lessel-schema-migration",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 33,
+   "summary": "Pin Node engine to 22.18+ (2)",
+   "description": "Set engines.node to >=22.18 in services/ledger/package.json and refresh the lockfile. Variant 2: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: dependency-bump.",
+   "label": "lessel-dependency-bump",
+   "agent": "Atlas",
+   "status": "pending"
+  },
+  {
+   "n": 34,
+   "summary": "Round fees half to even for EUR",
+   "description": "EUR fees round half to even instead of half away from zero. Domain change with tests.\n\nService: ledger. Expected change class: business-logic.",
+   "label": "lessel-business-logic",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 35,
+   "summary": "Add default currency to app config (2)",
+   "description": "Add defaultCurrency to services/ledger/config/app.json if missing and document it. Variant 2: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: config-infra.",
+   "label": "lessel-config-infra",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 36,
+   "summary": "Cover rate limiter refill (2)",
+   "description": "Add a test that the bucket refills over time at max_rps. Variant 2: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: test-fix.",
+   "label": "lessel-test-fix",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 37,
+   "summary": "Add audit_log table",
+   "description": "Create audit_log(id BIGSERIAL PRIMARY KEY, actor TEXT, action TEXT, target TEXT, at TIMESTAMPTZ DEFAULT now()).\n\nService: ledger. Expected change class: schema-migration.",
+   "label": "lessel-schema-migration",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 38,
+   "summary": "Add npm audit fix for transitive deps (2)",
+   "description": "Apply non-breaking audit fixes in services/ledger (package.json + lockfile only). Variant 2: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: dependency-bump.",
+   "label": "lessel-dependency-bump",
+   "agent": "Atlas",
+   "status": "pending"
+  },
+  {
+   "n": 39,
+   "summary": "Add daily transfer limit per account",
+   "description": "Add a pure function that checks a per-account daily limit given today's transfers.\n\nService: ledger. Expected change class: business-logic.",
+   "label": "lessel-business-logic",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 40,
+   "summary": "Lower rate limit for staging (2)",
+   "description": "Staging needs a lower rate limit. Change services/ledger/config/limits.json following the Ledger runbook: https://lessel.atlassian.net/wiki/spaces/ENG/pages/557057/Ledger+runbook Variant 2: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: config-infra.",
+   "label": "lessel-config-infra",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 41,
+   "summary": "Cover multi-currency balances (2)",
+   "description": "Add a balances() test with USD and EUR transactions mixed. Variant 2: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: test-fix.",
+   "label": "lessel-test-fix",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 42,
+   "summary": "Add currency to accounts index",
+   "description": "Add an index on accounts(owner, currency).\n\nService: ledger. Expected change class: schema-migration.",
+   "label": "lessel-schema-migration",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 43,
+   "summary": "Bump pg to the latest 8.x (3)",
+   "description": "Update pg in services/ledger to the latest 8.x release and refresh the lockfile. No code changes. Variant 3: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: dependency-bump.",
+   "label": "lessel-dependency-bump",
+   "agent": "Atlas",
+   "status": "pending"
+  },
+  {
+   "n": 44,
+   "summary": "Reject transfers between different currencies (2)",
+   "description": "POST /transfers must reject a transfer when the two accounts hold different currencies. Domain logic in src/domain. Variant 2: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: business-logic.",
+   "label": "lessel-business-logic",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 45,
+   "summary": "Add index on entries(account_id) (2)",
+   "description": "Balance queries scan entries. Add a migration creating an index on entries(account_id). Keep it additive. Variant 2: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: schema-migration.",
+   "label": "lessel-schema-migration",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 46,
+   "summary": "Refresh lockfile (3)",
+   "description": "Run npm install in services/ledger to refresh package-lock.json against current semver ranges. Variant 3: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: dependency-bump.",
+   "label": "lessel-dependency-bump",
+   "agent": "Atlas",
+   "status": "pending"
+  },
+  {
+   "n": 47,
+   "summary": "Lower USD fee floor to 25 cents (2)",
+   "description": "Change the USD minimum fee from 30 to 25 minor units in src/domain/fees.ts, with tests. Variant 2: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: business-logic.",
+   "label": "lessel-business-logic",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 48,
+   "summary": "Add created_by column to transactions (2)",
+   "description": "Add a nullable created_by TEXT column to transactions via a new migration. Don't backfill. Variant 2: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: schema-migration.",
+   "label": "lessel-schema-migration",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 49,
+   "summary": "Pin Node engine to 22.18+ (3)",
+   "description": "Set engines.node to >=22.18 in services/ledger/package.json and refresh the lockfile. Variant 3: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: dependency-bump.",
+   "label": "lessel-dependency-bump",
+   "agent": "Atlas",
+   "status": "pending"
+  },
+  {
+   "n": 50,
+   "summary": "Add NGN fee cap of 1,500 NGN (2)",
+   "description": "Cap NGN transfer fees at 150000 minor units. Update src/domain/fees.ts and tests. Variant 2: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: business-logic.",
+   "label": "lessel-business-logic",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 51,
+   "summary": "Add check constraint on entries.currency (2)",
+   "description": "Add a CHECK constraint so entries.currency is one of USD, EUR, NGN. New migration only. Variant 2: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: schema-migration.",
+   "label": "lessel-schema-migration",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 52,
+   "summary": "Add npm audit fix for transitive deps (3)",
+   "description": "Apply non-breaking audit fixes in services/ledger (package.json + lockfile only). Variant 3: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: dependency-bump.",
+   "label": "lessel-dependency-bump",
+   "agent": "Atlas",
+   "status": "pending"
+  },
+  {
+   "n": 53,
+   "summary": "Add memo length limit (2)",
+   "description": "Transfers with a memo longer than 140 characters must be rejected in the domain layer. Variant 2: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: business-logic.",
+   "label": "lessel-business-logic",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 54,
+   "summary": "Add idempotency_keys table (2)",
+   "description": "Create an idempotency_keys(key TEXT PRIMARY KEY, transaction_id TEXT, created_at TIMESTAMPTZ) table. Variant 2: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: schema-migration.",
+   "label": "lessel-schema-migration",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 55,
+   "summary": "Bump pg to the latest 8.x (4)",
+   "description": "Update pg in services/ledger to the latest 8.x release and refresh the lockfile. No code changes. Variant 4: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: dependency-bump.",
+   "label": "lessel-dependency-bump",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 56,
+   "summary": "Support EUR fee waiver for internal accounts (2)",
+   "description": "Transfers between accounts whose ids start with 'int_' pay no fee in EUR. Variant 2: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: business-logic.",
+   "label": "lessel-business-logic",
+   "agent": "Atlas",
+   "status": "pending"
+  },
+  {
+   "n": 57,
+   "summary": "Add account status column (2)",
+   "description": "Add accounts.status TEXT NOT NULL DEFAULT 'active' with a CHECK (active, frozen, closed). Variant 2: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: schema-migration.",
+   "label": "lessel-schema-migration",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 58,
+   "summary": "Refresh lockfile (4)",
+   "description": "Run npm install in services/ledger to refresh package-lock.json against current semver ranges. Variant 4: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: dependency-bump.",
+   "label": "lessel-dependency-bump",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 59,
+   "summary": "Add reversal transaction helper (2)",
+   "description": "Add reverse(tx) in src/domain/ledger.ts that produces the exact opposite transaction, with tests. Variant 2: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: business-logic.",
+   "label": "lessel-business-logic",
+   "agent": "Atlas",
+   "status": "pending"
+  },
+  {
+   "n": 60,
+   "summary": "Add composite index for transaction lookups (2)",
+   "description": "Add an index on entries(transaction_id, account_id) in a new migration. Variant 2: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: schema-migration.",
+   "label": "lessel-schema-migration",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 61,
+   "summary": "Pin Node engine to 22.18+ (4)",
+   "description": "Set engines.node to >=22.18 in services/ledger/package.json and refresh the lockfile. Variant 4: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: dependency-bump.",
+   "label": "lessel-dependency-bump",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 62,
+   "summary": "Round fees half to even for EUR (2)",
+   "description": "EUR fees round half to even instead of half away from zero. Domain change with tests. Variant 2: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: business-logic.",
+   "label": "lessel-business-logic",
+   "agent": "Atlas",
+   "status": "pending"
+  },
+  {
+   "n": 63,
+   "summary": "Add holds table (2)",
+   "description": "Create holds(id TEXT PRIMARY KEY, account_id TEXT REFERENCES accounts(id), amount_minor BIGINT, currency CHAR(3), expires_at TIMESTAMPTZ). Variant 2: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: schema-migration.",
+   "label": "lessel-schema-migration",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 64,
+   "summary": "Add npm audit fix for transitive deps (4)",
+   "description": "Apply non-breaking audit fixes in services/ledger (package.json + lockfile only). Variant 4: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: dependency-bump.",
+   "label": "lessel-dependency-bump",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 65,
+   "summary": "Add daily transfer limit per account (2)",
+   "description": "Add a pure function that checks a per-account daily limit given today's transfers. Variant 2: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: business-logic.",
+   "label": "lessel-business-logic",
+   "agent": "Atlas",
+   "status": "pending"
+  },
+  {
+   "n": 66,
+   "summary": "Add external_ref to transactions (2)",
+   "description": "Add a nullable external_ref TEXT column with a unique partial index where it's not null. Variant 2: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: schema-migration.",
+   "label": "lessel-schema-migration",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 67,
+   "summary": "Bump pg to the latest 8.x (5)",
+   "description": "Update pg in services/ledger to the latest 8.x release and refresh the lockfile. No code changes. Variant 5: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: dependency-bump.",
+   "label": "lessel-dependency-bump",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 68,
+   "summary": "Reject transfers between different currencies (3)",
+   "description": "POST /transfers must reject a transfer when the two accounts hold different currencies. Domain logic in src/domain. Variant 3: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: business-logic.",
+   "label": "lessel-business-logic",
+   "agent": "Atlas",
+   "status": "pending"
+  },
+  {
+   "n": 69,
+   "summary": "Add currency to accounts index (2)",
+   "description": "Add an index on accounts(owner, currency). Variant 2: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: schema-migration.",
+   "label": "lessel-schema-migration",
+   "agent": "Atlas",
+   "status": "pending"
+  },
+  {
+   "n": 70,
+   "summary": "Refresh lockfile (5)",
+   "description": "Run npm install in services/ledger to refresh package-lock.json against current semver ranges. Variant 5: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: dependency-bump.",
+   "label": "lessel-dependency-bump",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 71,
+   "summary": "Lower USD fee floor to 25 cents (3)",
+   "description": "Change the USD minimum fee from 30 to 25 minor units in src/domain/fees.ts, with tests. Variant 3: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: business-logic.",
+   "label": "lessel-business-logic",
+   "agent": "Atlas",
+   "status": "pending"
+  },
+  {
+   "n": 72,
+   "summary": "Add index on entries(account_id) (3)",
+   "description": "Balance queries scan entries. Add a migration creating an index on entries(account_id). Keep it additive. Variant 3: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: schema-migration.",
+   "label": "lessel-schema-migration",
+   "agent": "Atlas",
+   "status": "pending"
+  },
+  {
+   "n": 73,
+   "summary": "Cap coupons at 40%",
+   "description": "services/checkout: reject coupons above 40%. Domain change with tests.\n\nService: checkout. Expected change class: business-logic.",
+   "label": "lessel-business-logic",
+   "agent": "Atlas",
+   "status": "pending"
+  },
+  {
+   "n": 74,
+   "summary": "Add created_by column to transactions (3)",
+   "description": "Add a nullable created_by TEXT column to transactions via a new migration. Don't backfill. Variant 3: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: schema-migration.",
+   "label": "lessel-schema-migration",
+   "agent": "Atlas",
+   "status": "pending"
+  },
+  {
+   "n": 75,
+   "summary": "Round tax half to even",
+   "description": "services/checkout: tax rounds half to even. Domain change with tests.\n\nService: checkout. Expected change class: business-logic.",
+   "label": "lessel-business-logic",
+   "agent": "Atlas",
+   "status": "pending"
+  },
+  {
+   "n": 76,
+   "summary": "Add check constraint on entries.currency (3)",
+   "description": "Add a CHECK constraint so entries.currency is one of USD, EUR, NGN. New migration only. Variant 3: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: schema-migration.",
+   "label": "lessel-schema-migration",
+   "agent": "Atlas",
+   "status": "pending"
+  },
+  {
+   "n": 77,
+   "summary": "Reject more than 100 items",
+   "description": "services/checkout: reject carts with more than 100 total items.\n\nService: checkout. Expected change class: business-logic.",
+   "label": "lessel-business-logic",
+   "agent": "Atlas",
+   "status": "pending"
+  },
+  {
+   "n": 78,
+   "summary": "Add idempotency_keys table (3)",
+   "description": "Create an idempotency_keys(key TEXT PRIMARY KEY, transaction_id TEXT, created_at TIMESTAMPTZ) table. Variant 3: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: schema-migration.",
+   "label": "lessel-schema-migration",
+   "agent": "Atlas",
+   "status": "pending"
+  },
+  {
+   "n": 79,
+   "summary": "Free shipping threshold",
+   "description": "services/checkout: add a free-shipping flag when subtotal is over 5000 minor units.\n\nService: checkout. Expected change class: business-logic.",
+   "label": "lessel-business-logic",
+   "agent": "Atlas",
+   "status": "pending"
+  },
+  {
+   "n": 80,
+   "summary": "Add account status column (3)",
+   "description": "Add accounts.status TEXT NOT NULL DEFAULT 'active' with a CHECK (active, frozen, closed). Variant 3: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: schema-migration.",
+   "label": "lessel-schema-migration",
+   "agent": "Atlas",
+   "status": "pending"
+  },
+  {
+   "n": 81,
+   "summary": "Cap coupons at 40% (2)",
+   "description": "services/checkout: reject coupons above 40%. Domain change with tests. Variant 2: pick a different column, limit or test case than earlier tickets with this title.\n\nService: checkout. Expected change class: business-logic.",
+   "label": "lessel-business-logic",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 82,
+   "summary": "Add composite index for transaction lookups (3)",
+   "description": "Add an index on entries(transaction_id, account_id) in a new migration. Variant 3: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: schema-migration.",
+   "label": "lessel-schema-migration",
+   "agent": "Atlas",
+   "status": "pending"
+  },
+  {
+   "n": 83,
+   "summary": "Round tax half to even (2)",
+   "description": "services/checkout: tax rounds half to even. Domain change with tests. Variant 2: pick a different column, limit or test case than earlier tickets with this title.\n\nService: checkout. Expected change class: business-logic.",
+   "label": "lessel-business-logic",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 84,
+   "summary": "Add holds table (3)",
+   "description": "Create holds(id TEXT PRIMARY KEY, account_id TEXT REFERENCES accounts(id), amount_minor BIGINT, currency CHAR(3), expires_at TIMESTAMPTZ). Variant 3: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: schema-migration.",
+   "label": "lessel-schema-migration",
+   "agent": "Atlas",
+   "status": "pending"
+  },
+  {
+   "n": 85,
+   "summary": "Reject more than 100 items (2)",
+   "description": "services/checkout: reject carts with more than 100 total items. Variant 2: pick a different column, limit or test case than earlier tickets with this title.\n\nService: checkout. Expected change class: business-logic.",
+   "label": "lessel-business-logic",
+   "agent": "Brook",
+   "status": "pending"
+  },
+  {
+   "n": 86,
+   "summary": "Add external_ref to transactions (3)",
+   "description": "Add a nullable external_ref TEXT column with a unique partial index where it's not null. Variant 3: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: schema-migration.",
+   "label": "lessel-schema-migration",
+   "agent": "Atlas",
+   "status": "pending"
+  },
+  {
+   "n": 87,
+   "summary": "Add audit_log table (3)",
+   "description": "Create audit_log(id BIGSERIAL PRIMARY KEY, actor TEXT, action TEXT, target TEXT, at TIMESTAMPTZ DEFAULT now()). Variant 3: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: schema-migration.",
+   "label": "lessel-schema-migration",
+   "agent": "Atlas",
+   "status": "pending"
+  },
+  {
+   "n": 88,
+   "summary": "Add currency to accounts index (3)",
+   "description": "Add an index on accounts(owner, currency). Variant 3: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: schema-migration.",
+   "label": "lessel-schema-migration",
+   "agent": "Atlas",
+   "status": "pending"
+  },
+  {
+   "n": null,
+   "summary": "Add audit_log table (2)",
+   "description": "Create audit_log(id BIGSERIAL PRIMARY KEY, actor TEXT, action TEXT, target TEXT, at TIMESTAMPTZ DEFAULT now()). Variant 2: pick a different column, limit or test case than earlier tickets with this title.\n\nService: ledger. Expected change class: schema-migration.",
+   "label": "lessel-schema-migration",
+   "agent": "Brook",
+   "status": "held-for-demo"
+  },
+  {
+   "n": null,
+   "summary": "Free shipping threshold (2)",
+   "description": "services/checkout: add a free-shipping flag when subtotal is over 5000 minor units. Variant 2: pick a different column, limit or test case than earlier tickets with this title.\n\nService: checkout. Expected change class: business-logic.",
+   "label": "lessel-business-logic",
+   "agent": "Brook",
+   "status": "held-for-demo"
+  }
+ ],
+ "created_before_schedule": {
+  "PAY-1": "Add index on entries(account_id) (Brook)"
+ }
+}
