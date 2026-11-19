@@ -1,7 +1,7 @@
 # Lessel Demo Agents: the test rig, not the product. Two agent connectors (Atlas and Brook) backed by
 # the A2A runner in demo/runner. Kept separate from Lessel so Lessel stays remote-free (Runs on Atlassian).
 app:
-  id: ari:cloud:ecosystem::app/00000000-0000-0000-0000-000000000000 # replaced by `forge register`
+  id: ari:cloud:ecosystem::app/e5771e11-b708-4a6f-896a-52bc4d338747
   runtime:
     name: nodejs22.x
 
@@ -9,7 +9,8 @@ modules:
   rovo:agentConnector:
     - key: atlas
       name: Atlas
-      description: Fast coding agent for the ledger-service repo. Assign it a work item and it opens a PR.
+      description: Fast coding agent for the ledger-service repo. Assign it a work
+        item and it opens a PR.
       productContexts:
         - jira
       protocols:
@@ -19,7 +20,8 @@ modules:
             endpoint: atlas-a2a
     - key: brook
       name: Brook
-      description: Careful coding agent for the ledger-service repo. Assign it a work item and it opens a PR.
+      description: Careful coding agent for the ledger-service repo. Assign it a work
+        item and it opens a PR.
       productContexts:
         - jira
       protocols:

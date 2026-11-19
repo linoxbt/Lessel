@@ -35,6 +35,10 @@ available there; the agent connectors and MCP need it.
 | Git with Bitbucket API tokens | Confirmed: username `x-bitbucket-api-token-auth` (the runner already uses it) |
 | Agent accounts **Brook (agent)** and **Atlas (agent)** on the site | Done (active) |
 | Fortytwo key (Qwen) | Done: `FORTYTWO_API_KEY` on Railway `agent-runner` and as an encrypted Forge variable in Lessel; tested against the API |
+| Agent keys (Confluence and Bitbucket) for Brook and Atlas | Done: on Railway `agent-runner`; tested against Bitbucket |
+| Lessel Demo Agents app (`e5771e11-…`) registered, deployed, installed in Jira | Done |
+| Runner configuration (`RUNNER_CONFIG_JSON`, `FORGE_APP_ID`) | Done; runner healthy and refuses unsigned requests |
+| Brook and Atlas: write access to `linoxbt/ledger-service` | Waiting: Repository settings → Repository permissions |
 | 90 PAY tickets | `tickets/tickets.csv` regenerated with the runbook link; created when the agents go live |
 
 ---
