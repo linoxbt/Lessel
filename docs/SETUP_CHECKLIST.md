@@ -33,6 +33,8 @@ available there; the agent connectors and MCP need it.
 | Repository `linoxbt/ledger-service` (project LESSEL) with the demo code | Done. Repo uuid `a9264758-09b3-4c90-82ed-8cc7a6e5511a`, workspace uuid `39b301d2-4269-41cf-ad01-e87f4e5f6c5d` (for Lessel's `repos` setting) |
 | Pipeline variables: STAGING_URL, RAILWAY_SERVICE, JIRA_BASE_URL, INCIDENT_PROJECT, INCIDENT_ISSUE_TYPE, INCIDENT_COMPONENT | Done. Secrets (RAILWAY_TOKEN, JIRA_EMAIL, JIRA_API_TOKEN) and enabling Pipelines come with the agents |
 | Git with Bitbucket API tokens | Confirmed: username `x-bitbucket-api-token-auth` (the runner already uses it) |
+| Agent accounts **Brook (agent)** and **Atlas (agent)** on the site | Done (active) |
+| Fortytwo key (Qwen) | Done: `FORTYTWO_API_KEY` on Railway `agent-runner` and as an encrypted Forge variable in Lessel; tested against the API |
 | 90 PAY tickets | `tickets/tickets.csv` regenerated with the runbook link; created when the agents go live |
 
 ---
