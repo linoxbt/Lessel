@@ -1,9 +1,10 @@
 "use strict";
-// Bitbucket Cloud REST 2.0 with an API token, through Forge egress to api.bitbucket.org.
-// Forge doesn't let one app hold both site scopes (Jira, Confluence) and workspace scopes (Bitbucket), so Lessel
-// reads Bitbucket with a token kept in encrypted Forge variables: BITBUCKET_EMAIL and BITBUCKET_API_TOKEN (a
-// scoped API token with repository and pull request read, plus pull request write for PR notices).
-// Bitbucket events and the merge check reach Lessel through the Lessel for Bitbucket app (see src/bridge.js).
+// Bitbucket Cloud REST 2.0. Forge doesn't let one app hold both site scopes (Jira, Confluence) and workspace scopes
+// (Bitbucket), so Lessel makes its Bitbucket calls in one of two ways:
+//  - through Lessel for Bitbucket (default): a signed request to its bitbucket-proxy web trigger
+//    (LESSEL_BB_PROXY_URL), which calls Bitbucket with that app's own access. No token needed;
+//  - or directly with a scoped API token, if BITBUCKET_EMAIL and BITBUCKET_API_TOKEN are set.
+// Bitbucket events and the merge check reach Lessel through the same app (see src/bridge.js).
 
 const { readJson, paged } = require("./http");
 
@@ -15,18 +16,29 @@ const braced = uuid => (String(uuid).startsWith("{") ? String(uuid) : `{${uuid}}
 /** Path template that URL-encodes every interpolated value (braces become %7B…%7D, which Bitbucket accepts). */
 const route = (strings, ...vals) => strings.reduce((s, str, i) => s + str + (i < vals.length ? encodeURIComponent(String(vals[i])) : ""), "");
 
+const hasToken = () => !!(process.env.BITBUCKET_EMAIL && process.env.BITBUCKET_API_TOKEN);
 function authHeader() {
-  const email = process.env.BITBUCKET_EMAIL, token = process.env.BITBUCKET_API_TOKEN;
-  if (!email || !token) throw new Error("Bitbucket isn't connected: set the BITBUCKET_EMAIL and BITBUCKET_API_TOKEN Forge variables.");
-  return `Basic ${Buffer.from(`${email}:${token}`).toString("base64")}`;
+  return `Basic ${Buffer.from(`${process.env.BITBUCKET_EMAIL}:${process.env.BITBUCKET_API_TOKEN}`).toString("base64")}`;
 }
 
 /** Tests can replace the transport. */
 let transport = (url, opts) => require("@forge/api").fetch(url, opts);
 const setTransport = fn => { transport = fn; };
 
+/** Returns a fetch-like response for `path` (and an optional JSON body for POST). */
 async function send(path, opts = {}) {
-  return transport(`${BASE}${path}`, { ...opts, headers: { Accept: "application/json", ...(opts.headers ?? {}), Authorization: authHeader() } });
+  if (hasToken()) {
+    return transport(`${BASE}${path}`, { ...opts, headers: { Accept: "application/json", ...(opts.headers ?? {}), Authorization: authHeader() } });
+  }
+  const url = process.env.LESSEL_BB_PROXY_URL, secret = process.env.LESSEL_BRIDGE_SECRET;
+  if (!url || !secret) throw new Error("Bitbucket isn't connected: set LESSEL_BB_PROXY_URL (Lessel for Bitbucket's bitbucket-proxy web trigger), or BITBUCKET_EMAIL and BITBUCKET_API_TOKEN.");
+  const { sign } = require("../bridge-sign");
+  const body = JSON.stringify({ method: opts.method ?? "GET", path, ...(opts.body ? { body: JSON.parse(opts.body) } : {}) });
+  const res = await transport(url, { method: "POST", headers: { "Content-Type": "application/json", "x-lessel-signature": sign(body, secret) }, body });
+  const text = await res.text();
+  if (!res.ok) return { ok: false, status: res.status, text: async () => text };
+  const inner = JSON.parse(text);   // { status, body } from Bitbucket
+  return { ok: inner.status >= 200 && inner.status < 300, status: inner.status, text: async () => inner.body ?? "" };
 }
 async function get(path) { return readJson(await send(path), path); }
 async function getAbsolute(url) {

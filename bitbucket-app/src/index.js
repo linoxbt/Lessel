@@ -49,4 +49,39 @@ async function mergeCheck(event) {
   }
 }
 
-module.exports = { onEvent, mergeCheck, post, setTransport };
+// ---------- Bitbucket REST on Lessel's behalf ----------
+// Lessel (the site app) has no Bitbucket permissions. It sends signed requests to this app's bitbucket-proxy web
+// trigger, which makes the call with this app's own Bitbucket access. Only the reads Lessel needs and posting a
+// PR comment are allowed.
+const { verify } = require("./bridge-sign");
+
+const REPO = String.raw`/2\.0/repositories/[^/?#]+/[^/?#]+`;
+const ALLOWED = {
+  GET: new RegExp(`^${REPO}/(?:pullrequests(?:/\\d+(?:/(?:diffstat|commits))?)?|commits?/[^?#]+|merge-base/[^?#]+|deployments/?|environments/[^/?#]+)(?:\\?[^#]*)?$`),
+  POST: new RegExp(`^${REPO}/pullrequests/\\d+/comments$`),
+};
+
+let bitbucketRequest = (path, opts) => {
+  const api = require("@forge/api");
+  return api.asApp().requestBitbucket(api.assumeTrustedRoute(path), opts);
+};
+const setBitbucketRequest = fn => { bitbucketRequest = fn; };
+
+const header = (req, name) => { const v = req?.headers?.[name]; return Array.isArray(v) ? v[0] : v; };
+const reply = (statusCode, obj) => ({ statusCode, headers: { "Content-Type": ["application/json"] }, body: JSON.stringify(obj) });
+
+async function bitbucketProxy(req) {
+  const body = typeof req?.body === "string" ? req.body : "";
+  if (!verify(body, header(req, "x-lessel-signature"), process.env.LESSEL_BRIDGE_SECRET)) return reply(401, { error: "bad signature" });
+  let msg;
+  try { msg = JSON.parse(body); } catch { return reply(400, { error: "bad json" }); }
+  const method = msg.method === "POST" ? "POST" : "GET";
+  if (typeof msg.path !== "string" || !ALLOWED[method].test(msg.path) || msg.path.includes("..")) {
+    return reply(403, { error: `not allowed: ${method} ${String(msg.path).slice(0, 120)}` });
+  }
+  const res = await bitbucketRequest(msg.path, { method, headers: { Accept: "application/json",
+    ...(method === "POST" ? { "Content-Type": "application/json" } : {}) }, ...(method === "POST" ? { body: JSON.stringify(msg.body ?? {}) } : {}) });
+  return reply(200, { status: res.status, body: await res.text() });
+}
+
+module.exports = { onEvent, mergeCheck, post, setTransport, bitbucketProxy, setBitbucketRequest, ALLOWED };

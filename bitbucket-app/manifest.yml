@@ -25,7 +25,16 @@ modules:
         - on-reviewer-status-changed
         - on-merge
 
+  # Lessel (the site app) calls this, signed, to make the Bitbucket REST calls it needs (reads, PR comments).
+  webtrigger:
+    - key: bitbucket-proxy
+      function: bitbucketProxy
+      response:
+        type: dynamic
+
   function:
+    - key: bitbucketProxy
+      handler: index.bitbucketProxy
     - key: onEvent
       handler: index.onEvent
     - key: mergeCheck
@@ -36,6 +45,7 @@ permissions:
     - read:pullrequest:bitbucket
     - read:repository:bitbucket
     - read:pipeline:bitbucket
+    - write:pullrequest:bitbucket   # Lessel's PR notices
   external:
     fetch:
       backend:

@@ -130,3 +130,30 @@ test("Confluence installation forwards events to the Jira one, signed", async ()
   delete process.env.LESSEL_BRIDGE_URL; delete process.env.LESSEL_BRIDGE_SECRET;
 });
 
+
+test("Bitbucket calls go through Lessel for Bitbucket's proxy, which only allows what Lessel needs", async () => {
+  const app = require("../bitbucket-app/src/index");
+  const bb = require("../src/adapters/bitbucket");
+  process.env.LESSEL_BRIDGE_SECRET = SECRET;
+  process.env.LESSEL_BB_PROXY_URL = "https://def.hello.atlassian-dev.net/x1/p";
+  const asApp = [];
+  app.setBitbucketRequest(async (path, opts) => {
+    asApp.push(`${opts.method} ${path}`);
+    return { status: 200, text: async () => JSON.stringify(path.endsWith("/comments") ? { id: 1 } : { id: 9, title: "PAY-1" }) };
+  });
+  // Lessel's adapter → (signed web trigger call) → the Bitbucket app's handler, wired directly.
+  bb.setTransport(async (url, opts) => {
+    assert.equal(url, process.env.LESSEL_BB_PROXY_URL);
+    const out = await app.bitbucketProxy({ body: opts.body, headers: { "x-lessel-signature": [opts.headers["x-lessel-signature"]] } });
+    return { ok: out.statusCode === 200, status: out.statusCode, text: async () => out.body };
+  });
+  assert.deepEqual(await bb.getPr("w", "r", 9), { id: 9, title: "PAY-1" });
+  assert.deepEqual(await bb.postPrComment("w", "r", 9, "**Lessel:** hi"), { id: 1 });
+  assert.deepEqual(asApp, ["GET /2.0/repositories/%7Bw%7D/%7Br%7D/pullrequests/9", "POST /2.0/repositories/%7Bw%7D/%7Br%7D/pullrequests/9/comments"]);
+
+  const signed = obj => { const body = JSON.stringify(obj); return { body, headers: { "x-lessel-signature": [sign(body, SECRET)] } }; };
+  assert.equal((await app.bitbucketProxy(signed({ method: "POST", path: "/2.0/repositories/w/r/pullrequests/9/merge" }))).statusCode, 403);
+  assert.equal((await app.bitbucketProxy(signed({ method: "GET", path: "/2.0/user" }))).statusCode, 403);
+  assert.equal((await app.bitbucketProxy({ body: "{}", headers: {} })).statusCode, 401);
+  delete process.env.LESSEL_BRIDGE_SECRET; delete process.env.LESSEL_BB_PROXY_URL;
+});
