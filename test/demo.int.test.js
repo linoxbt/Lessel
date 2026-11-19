@@ -754,3 +754,37 @@ test("personal data reporting: reports stored accountIds, erases closed ones eve
   const again = (await repo.storedAccounts()).map(a => a.accountId);
   assert.ok(!again.includes("oncall-1") && !again.includes("closed-account"));
 });
+
+test("signed link: setup registers agents and settings; the demo runner declares reads without MCP", async (t) => {
+  if (!pool) return t.skip("no test database");
+  const { bitbucketBridge } = require("../src/bridge");
+  const { sign } = require("../src/bridge-sign");
+  const SECRET = "z".repeat(40);
+  process.env.LESSEL_BRIDGE_SECRET = SECRET;
+  const call = async obj => { const body = JSON.stringify(obj); const r = await bitbucketBridge({ body, headers: { "x-lessel-signature": [sign(body, SECRET)] } });
+    return { status: r.statusCode, body: JSON.parse(r.body) }; };
+  try {
+    let r = await call({ kind: "setup", agents: [{ agent_id: "nova", display_name: "Nova",
+      accounts: [{ product: "jira", accountId: "j-nova" }, { product: "bitbucket", accountId: "{U-NOVA}" }] }],
+      settings: { windowHours: 72 } });
+    assert.equal(r.status, 200);
+    assert.equal((await repo.agentForAccount("bitbucket", "u-nova")).agent_id, "nova");
+    assert.equal((await repo.getSettings()).windowHours, 72);
+    assert.equal((await call({ kind: "setup", settings: { notASetting: 1 } })).status, 500, "unknown settings are refused");
+
+    w.page("9900", ["<p>Runbook.</p>"]);
+    const url = "https://team.atlassian.net/wiki/spaces/ENG/pages/9900/Runbook";
+    r = await call({ kind: "declare-context", agentId: "nova", issueKey: "PAY-990", sourceUrl: url, sourceVersion: 1 });
+    assert.equal(r.status, 409);
+    assert.match(r.body.message, /^Refused: Nova is not working on PAY-990\./);
+    w.issue("PAY-990"); w.issues.get("PAY-990").fields.assignee = { accountId: "j-nova" };
+    await J.onJiraEvent({ eventType: "avi:jira:assigned:issue", issue: w.issues.get("PAY-990"), changelog: { id: "a-990" } });
+    r = await call({ kind: "declare-context", agentId: "nova", issueKey: "PAY-990", sourceUrl: url, sourceVersion: 1 });
+    assert.equal(r.status, 200);
+    assert.match(r.body.message, /^Recorded: .*v1 \(declared\)/);
+    assert.equal((await repo.readsForItem("PAY-990"))[0].agent_id, "nova");
+    assert.equal((await call({ kind: "declare-context", agentId: "ghost", issueKey: "PAY-990", sourceUrl: url })).status, 404);
+    r = await call({ kind: "ticket-fit", agentId: "nova", issueKey: "PAY-990" });
+    assert.match(r.body.message, /^Nova is L1 on /);
+  } finally { delete process.env.LESSEL_BRIDGE_SECRET; }
+});

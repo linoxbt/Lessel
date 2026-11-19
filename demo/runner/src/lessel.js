@@ -4,6 +4,7 @@
 
 import { readFileSync, writeFileSync, mkdirSync, chmodSync } from "node:fs";
 import { dirname } from "node:path";
+import { createHmac } from "node:crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
@@ -79,3 +80,32 @@ export class Lessel {
   }
   checkTicketFit(issueKey) { return this.call("check-ticket-fit", { issueKey }); }
 }
+
+/**
+ * The same two calls through Lessel's signed web trigger (LESSEL_BRIDGE_URL + LESSEL_BRIDGE_SECRET), for the
+ * demo rig: no per-agent MCP sign-in. The runner names the agent; Lessel trusts it because only holders of the
+ * shared secret can call. Third-party agents use the MCP server, where identity comes from the caller.
+ */
+export class LesselBridge {
+  constructor({ url, secret, agentId, fetchFn = fetch }) { Object.assign(this, { url, secret, agentId, fetchFn }); }
+
+  sign(body) {
+    const t = Math.floor(Date.now() / 1000);
+    return `t=${t},v1=${createHmac("sha256", this.secret).update(`${t}.${body}`).digest("hex")}`;
+  }
+
+  async send(kind, args) {
+    const body = JSON.stringify({ kind, agentId: this.agentId, ...args });
+    const res = await this.fetchFn(this.url, { method: "POST", body,
+      headers: { "content-type": "application/json", "x-lessel-signature": this.sign(body) } });
+    const text = await res.text();
+    let msg = null;
+    try { msg = JSON.parse(text).message ?? JSON.parse(text).error; } catch { /* not JSON */ }
+    if (!res.ok) throw new Error(msg || `Lessel answered ${res.status}`);
+    return msg ?? "";
+  }
+
+  declareContext({ issueKey, sourceUrl, sourceVersion, readAt }) { return this.send("declare-context", { issueKey, sourceUrl, sourceVersion, readAt }); }
+  checkTicketFit(issueKey) { return this.send("ticket-fit", { issueKey }); }
+}
+

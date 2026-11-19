@@ -7,7 +7,7 @@ import { TaskStore } from "./store.js";
 import { makeVerifier, jiraBase } from "./fit.js";
 import { Git } from "./git.js";
 import { Bitbucket, Confluence, commentOnIssue } from "./atlassian.js";
-import { Lessel } from "./lessel.js";
+import { Lessel, LesselBridge } from "./lessel.js";
 import { runAgent } from "./agent.js";
 import { workOn, SerialQueue } from "./work.js";
 
@@ -31,7 +31,10 @@ export function createServer(cfg, overrides = {}) {
         mainBranch: cfg.repo.mainBranch, ...agent.git }),
       bitbucket,
       confluence: new Confluence({ baseUrl: cfg.siteUrl, ...agent.confluence }),
-      lessel: new Lessel({ url: cfg.lesselMcpUrl, tokenFile: agent.mcpTokenFile }),
+      // Signed bridge when configured (no per-agent MCP sign-in); otherwise Lessel's MCP server as the agent.
+      lessel: process.env.LESSEL_BRIDGE_URL && process.env.LESSEL_BRIDGE_SECRET
+        ? new LesselBridge({ url: process.env.LESSEL_BRIDGE_URL, secret: process.env.LESSEL_BRIDGE_SECRET, agentId: agent.id })
+        : new Lessel({ url: cfg.lesselMcpUrl, tokenFile: agent.mcpTokenFile }),
       runAgent,
       mainBranch: cfg.repo.mainBranch,
       comment: text => commentOnIssue({ jiraBase: jiraBase(fit), systemToken, issueKey: fit.issueKey, text }),
