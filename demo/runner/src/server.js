@@ -7,7 +7,7 @@ import { TaskStore } from "./store.js";
 import { makeVerifier, jiraBase } from "./fit.js";
 import { Git } from "./git.js";
 import { Bitbucket, Confluence, commentOnIssue } from "./atlassian.js";
-import { Lessel, LesselBridge } from "./lessel.js";
+import { Lessel, LesselBridge, FallbackLessel } from "./lessel.js";
 import { runAgent } from "./agent.js";
 import { sandboxIdentity } from "./sandbox.js";
 import { workOn, SerialQueue, abortTask } from "./work.js";
@@ -21,9 +21,15 @@ const MAX_BODY = 1024 * 1024;
  * message kinds; the runner never holds Lessel's master bridge secret.
  */
 export function lesselClient(cfg, agent, env = process.env) {
-  return env.LESSEL_BRIDGE_URL && env.LESSEL_RUNNER_SECRET
-    ? new LesselBridge({ url: env.LESSEL_BRIDGE_URL, secret: env.LESSEL_RUNNER_SECRET, agentId: agent.id })
-    : new Lessel({ url: cfg.lesselMcpUrl, tokenFile: agent.mcpTokenFile });
+  const link = env.LESSEL_BRIDGE_URL && env.LESSEL_RUNNER_SECRET
+    ? new LesselBridge({ url: env.LESSEL_BRIDGE_URL, secret: env.LESSEL_RUNNER_SECRET, agentId: agent.id }) : null;
+  // RUNNER_MCP_AUTH=token: call Lessel's MCP tools as the agent's own account (its Atlassian API token), with the
+  // runner link as the fallback.
+  const creds = agent.confluence ?? {};
+  if (env.RUNNER_MCP_AUTH === "token" && cfg.lesselMcpUrl && creds.email && creds.token) {
+    return new FallbackLessel(new Lessel({ url: cfg.lesselMcpUrl, basicAuth: { email: creds.email, token: creds.token } }), link, { name: agent.name ?? agent.id });
+  }
+  return link ?? new Lessel({ url: cfg.lesselMcpUrl, tokenFile: agent.mcpTokenFile });
 }
 
 export function createServer(cfg, overrides = {}) {

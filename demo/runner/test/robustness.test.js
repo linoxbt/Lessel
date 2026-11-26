@@ -205,3 +205,32 @@ test("a restarted runner marks stale WORKING tasks failed and retryable", async 
   assert.equal(store.get("t1").metadata.retryable, true);
   assert.equal(store.tasksFor("brook", "PAY-1").length, 1);
 });
+
+test("PR titles: short imperative summaries are kept; paragraphs and test reports fall back to the ticket", async () => {
+  const { prTitle } = await import("../src/work.js");
+  assert.equal(prTitle("Add index on entries(account_id)", "x"), "Add index on entries(account_id)");
+  assert.equal(prTitle("All 12 tests passed (the empty `debug.test.ts` placeholder is the one that shows up as `ok`", "Reject transfers between different currencies"),
+    "Reject transfers between different currencies");
+  assert.equal(prTitle("", "Refresh lockfile"), "Refresh lockfile");
+  assert.equal(prTitle("Bump pg to ^8.23.1 in ledger.", "x"), "Bump pg to ^8.23.1 in ledger");
+});
+
+test("Lessel client: MCP as the agent first, the runner link when MCP is refused", async () => {
+  const { lesselClient } = await import("../src/server.js");
+  const { FallbackLessel, LesselBridge, Lessel } = await import("../src/lessel.js");
+  const agent = { id: "brook", name: "Brook", confluence: { email: "b@x", token: "t" } };
+  const env = { LESSEL_BRIDGE_URL: "https://bridge", LESSEL_RUNNER_SECRET: "m".repeat(40), RUNNER_MCP_AUTH: "token" };
+  const c = lesselClient({ lesselMcpUrl: "https://mcp.atlassian.com/forge/x" }, agent, env);
+  assert.ok(c instanceof FallbackLessel);
+  assert.ok(c.primary instanceof Lessel && c.secondary instanceof LesselBridge);
+  assert.ok(lesselClient({ lesselMcpUrl: "https://m" }, agent, { ...env, RUNNER_MCP_AUTH: "" }) instanceof LesselBridge);
+  const logs = [];
+  const log = { log: m => logs.push(m), warn: m => logs.push(m) };
+  const ok = new FallbackLessel({ declareContext: async () => "Recorded via MCP" }, { declareContext: async () => "link" }, { name: "Brook", log });
+  assert.equal(await ok.declareContext({}), "Recorded via MCP");
+  assert.equal(ok.lastPath, "mcp");
+  const fb = new FallbackLessel({ declareContext: async () => { throw new Error("401 Unauthorized"); } }, { declareContext: async () => "Recorded" }, { name: "Brook", log });
+  assert.equal(await fb.declareContext({}), "Recorded");
+  assert.equal(fb.lastPath, "link");
+  assert.match(logs.at(-1), /Lessel MCP refused \(401 Unauthorized\); using the runner link/);
+});

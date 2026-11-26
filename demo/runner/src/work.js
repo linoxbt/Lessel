@@ -109,7 +109,7 @@ export async function workOn(task, inv, agent, deps) {
     }
 
     if (stopped()) return;
-    const title = `${inv.issueKey} ${result.summary}`.slice(0, 200);
+    const title = `${inv.issueKey}: ${prTitle(result.summary, inv.summary)}`;
     const sha = await git.commitAndPush(branch, `${title}\n\nLessel-Agent: ${agent.id}`, changed);
     if (stopped()) return;
     const tests = result.testsRun.length
@@ -149,3 +149,16 @@ export class SerialQueue {
     return this.tail;
   }
 }
+
+/**
+ * A short PR title. The model's own summary is used when it reads like a title (one line, no markdown, at most
+ * 90 characters, no report about tests); otherwise the work item's summary is (a model once titled a PR with a
+ * paragraph about which tests passed).
+ */
+export function prTitle(modelSummary, ticketSummary = "") {
+  const line = String(modelSummary ?? "").split("\n")[0].replace(/[`*#>]/g, "").replace(/\s+/g, " ").trim().replace(/[.:]$/, "");
+  const fallback = String(ticketSummary ?? "").replace(/\s+/g, " ").trim().slice(0, 90) || "Changes";
+  const looksLikeTitle = line.length >= 8 && line.length <= 90 && !/\b(tests?|passed|failed|I |I'm|I've)\b/i.test(line) && (line.match(/[.!?](\s|$)/g) ?? []).length === 0;
+  return looksLikeTitle ? line : fallback;
+}
+

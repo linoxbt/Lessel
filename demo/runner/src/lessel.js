@@ -47,11 +47,18 @@ export class FileOAuthProvider {
 }
 
 export class Lessel {
-  constructor({ url, tokenFile }) { this.url = url; this.tokenFile = tokenFile; this.client = null; this.tools = null; }
+  /**
+   * @param basicAuth optional { email, token }: the agent's own Atlassian API token, sent as Basic auth instead of
+   *   an OAuth sign-in. Lessel still takes identity from the calling account, so a read is bound to that agent.
+   */
+  constructor({ url, tokenFile, basicAuth = null }) { this.url = url; this.tokenFile = tokenFile; this.basicAuth = basicAuth; this.client = null; this.tools = null; }
 
   async connect() {
     if (this.client) return this.client;
-    const transport = new StreamableHTTPClientTransport(new URL(this.url), { authProvider: new FileOAuthProvider(this.tokenFile) });
+    const auth = this.basicAuth
+      ? { requestInit: { headers: { Authorization: `Basic ${Buffer.from(`${this.basicAuth.email}:${this.basicAuth.token}`).toString("base64")}` } } }
+      : { authProvider: new FileOAuthProvider(this.tokenFile) };
+    const transport = new StreamableHTTPClientTransport(new URL(this.url), auth);
     const client = new Client({ name: "lessel-demo-runner", version: "0.1.0" });
     await client.connect(transport);
     this.client = client;
@@ -109,5 +116,29 @@ export class LesselBridge {
   }
 
   declareContext({ issueKey, sourceUrl, sourceVersion, readAt }) { return this.send("declare-context", { issueKey, sourceUrl, sourceVersion, readAt }); }
+}
+
+/**
+ * Lessel's MCP tools first (identity from the agent's own account), the runner's signed link if MCP is refused.
+ * Every call logs which path recorded it, so the demo shows whether the MCP path works on the site.
+ */
+export class FallbackLessel {
+  constructor(primary, secondary, { name = "agent", log = console } = {}) { Object.assign(this, { primary, secondary, name, log }); this.lastPath = null; }
+
+  async declareContext(args) {
+    try {
+      const out = await this.primary.declareContext(args);
+      this.lastPath = "mcp";
+      this.log.log(`${this.name}: declare-context recorded through Lessel's MCP server`);
+      return out;
+    } catch (e) {
+      if (!this.secondary) throw e;
+      this.log.warn(`${this.name}: Lessel MCP refused (${String(e.message).slice(0, 160)}); using the runner link`);
+      this.primary.client = null;   // reconnect next time
+      const out = await this.secondary.declareContext(args);
+      this.lastPath = "link";
+      return out;
+    }
+  }
 }
 

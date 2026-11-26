@@ -91,7 +91,7 @@ test("assignment → declare-context (before PR) → commit with trailer → PR 
     assert.equal(task.status.state, STATE.COMPLETED, task.status.message?.parts?.[0]?.text);
     assert.match(task.status.message.parts[0].text, /^Opened PR #42/);
 
-    assert.deepEqual(order, [`read ${runbook}`, "declare v7", "pr PAY-201 Add index on entries(account_id)", "comment"]);
+    assert.deepEqual(order, [`read ${runbook}`, "declare v7", "pr PAY-201: Add index on entries(account_id)", "comment"]);
     assert.match(seen.pr.description, /Context read:\n.*Ledger\+runbook v7\n/);
     assert.doesNotMatch(seen.pr.description, /NOT declared/);
     const first = seen.requests[0];
@@ -110,7 +110,7 @@ test("assignment → declare-context (before PR) → commit with trailer → PR 
 
     const branch = "lessel/brook/PAY-201";
     const log = sh(bare, "log", "-1", "--format=%an%n%B", branch);
-    assert.match(log, /^Brook \(agent\)\nPAY-201 Add index on entries\(account_id\)\n\nLessel-Agent: brook/);
+    assert.match(log, /^Brook \(agent\)\nPAY-201: Add index on entries\(account_id\)\n\nLessel-Agent: brook/);
     assert.equal(sh(bare, "show", `${branch}:services/ledger/migrations/0003_entries_account_idx.sql`),
       "CREATE INDEX IF NOT EXISTS entries_account_idx ON entries(account_id);");
   } finally {
