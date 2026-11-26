@@ -18,8 +18,9 @@ numbers below (§) refer to it. Submission material: [judge guide](docs/JUDGES.m
 The P1 core, P2 Clean Room, P3 actions and the Teamwork Graph integration are built and tested. Lessel and
 Lessel for Bitbucket run in the development environment on the demo site (lessel.atlassian.net and the
 `linoxbt` workspace), paired per installation. The demo rig (ledger-service repo, A2A runner, Demo Agents
-app) is in [`demo/`](demo/README.md); the runner is hosted on Railway. Not done yet: production deploy and
-distribution link, and registering the Teamwork Graph queries on the demo site.
+app) is in [`demo/`](demo/README.md); the runner is hosted on Railway. Both apps are also deployed to the
+production environment (Nov 26), ready for distribution links. Not done yet: the distribution links themselves
+(developer console), and registering the Teamwork Graph queries on the demo site.
 
 | Area | State |
 |---|---|
