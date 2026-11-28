@@ -16,8 +16,8 @@ snapshot from our demo site is attached to the submission when available (Lessel
 
 ## 1. Install (2 minutes)
 
-1. Open the **Lessel** install link from the submission and install it on your Jira site (and Confluence, if
-   you have it).
+1. Install Lessel on your Jira site (and Confluence, if you have it) with this link:
+   [Install Lessel](https://developer.atlassian.com/console/install/03a24df7-5c2b-474f-b1ef-a7a69ebef400?signature=AYABeGL%2B6PtDoqFZ%2BtC1bJfS2y0AAAADAAdhd3Mta21zAEthcm46YXdzOmttczp1cy13ZXN0LTI6NzA5NTg3ODM1MjQzOmtleS83MDVlZDY3MC1mNTdjLTQxYjUtOWY5Yi1lM2YyZGNjMTQ2ZTcAuAECAQB4CxqLTo9l4lqXuFjNim1xJM%2Bp%2F3TVP9xHS2BrU5DRRucBSk5B9mmoDIwcOYzE5UKVUAAAAH4wfAYJKoZIhvcNAQcGoG8wbQIBADBoBgkqhkiG9w0BBwEwHgYJYIZIAWUDBAEuMBEEDGLml17hK97vW1ZCtAIBEIA7KpQtw1PF9OrFISXGKMs%2FJDE7Iyzi6eS4WjrmHL2js00jkkFjSZQP2dY6TlBCtnl09JjYcvkkMsVb5pEAB2F3cy1rbXMAS2Fybjphd3M6a21zOmV1LXdlc3QtMTo3MDk1ODc4MzUyNDM6a2V5LzQ2MzBjZTZiLTAwYzMtNGRlMi04NzdiLTYyN2UyMDYwZTVjYwC4AQICAHi9bVMAkme4qVQX1fQHo6ePw3H40A7cGfz7yrmSfBWMXgGmHTcMkf9qlaDB2yc35DZ1AAAAfjB8BgkqhkiG9w0BBwagbzBtAgEAMGgGCSqGSIb3DQEHATAeBglghkgBZQMEAS4wEQQMC4jwQ3jZc1JNv1%2F8AgEQgDt%2Fj0jL2dMcGPzIG2Rik11svwEdX8zAj%2F1EzfRTOSXxIrA6o9et1X7YBB6QT3qr%2B46j1zDIeOA%2Fp25%2FQAAHYXdzLWttcwBLYXJuOmF3czprbXM6dXMtZWFzdC0xOjcwOTU4NzgzNTI0MzprZXkvNmMxMjBiYTAtNGNkNS00OTg1LWI4MmUtNDBhMDQ5NTJjYzU3ALgBAgIAeDYASx0XCjkny4iLV6vz%2BKtEGSGT6kdt0QRpkn6D%2FlVEAYPGK4o3W%2Bucxd6H%2B8ei3dsAAAB%2BMHwGCSqGSIb3DQEHBqBvMG0CAQAwaAYJKoZIhvcNAQcBMB4GCWCGSAFlAwQBLjARBAw4EuT4d5nIW9dGPyYCARCAO8pi62HcKC%2FsvYJfeAZeBqjPDs4qvVBSj1hzFXu0YQvabaipKaGGy7acBWqmUF1Xg3GLeFAf9YHJVRWlAgAAAAAMAAAQAAAAAAAAAAAAAAAAAJZ8KZFvPDVPIoMQOF75XHP%2F%2F%2F%2F%2FAAAAAQAAAAAAAAAAAAAAAQAAADK0hAjFQyJ%2FxZI6PGWflTlkd%2FlP1Sz2uQEZdf6xkkuGzYH%2BwzsIB3BsyBxHR709RrWnXgm1ve4KLkE1gq3Ynkt3Riw%3D&product=confluence&product=jira)
 2. Open **Apps → Lessel settings**. The banner says "People are never scored". Migrations run on install. If
    anything fails to load, the **Jobs** section is still shown: click **Run migrations**, then **Retry**.
 3. Optional, Bitbucket: Lessel for Bitbucket is a **separate** app (Forge can't hold site and workspace
