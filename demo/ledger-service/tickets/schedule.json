@@ -70,7 +70,8 @@
       "description": "Change the USD minimum fee from 30 to 25 minor units in src/domain/fees.ts, with tests.\n\nService: ledger. Expected change class: business-logic.",
       "label": "lessel-business-logic",
       "agent": "Brook",
-      "status": "pending"
+      "status": "created",
+      "key": "PAY-9"
     },
     {
       "n": 10,
@@ -78,7 +79,8 @@
       "description": "Adjust burst in services/ledger/config/limits.json per the Ledger runbook guidance: https://lessel.atlassian.net/wiki/spaces/ENG/pages/557057/Ledger+runbook\n\nService: ledger. Expected change class: config-infra.",
       "label": "lessel-config-infra",
       "agent": "Atlas",
-      "status": "pending"
+      "status": "created",
+      "key": "PAY-10"
     },
     {
       "n": 11,
@@ -86,7 +88,8 @@
       "description": "Add tests for invalid account ids and owners in services/ledger/src/routes/schema.test.ts.\n\nService: ledger. Expected change class: test-fix.",
       "label": "lessel-test-fix",
       "agent": "Atlas",
-      "status": "pending"
+      "status": "created",
+      "key": "PAY-11"
     },
     {
       "n": 12,
@@ -94,7 +97,8 @@
       "description": "Create an idempotency_keys(key TEXT PRIMARY KEY, transaction_id TEXT, created_at TIMESTAMPTZ) table.\n\nService: ledger. Expected change class: schema-migration.",
       "label": "lessel-schema-migration",
       "agent": "Brook",
-      "status": "pending"
+      "status": "created",
+      "key": "PAY-12"
     },
     {
       "n": 13,
